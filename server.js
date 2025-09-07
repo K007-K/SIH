@@ -1,0 +1,524 @@
+const express = require('express');
+const cors = require('cors');
+const helmet = require('helmet');
+const dotenv = require('dotenv');
+const axios = require('axios');
+const { createClient } = require('@supabase/supabase-js');
+const multer = require('multer');
+const cron = require('node-cron');
+const moment = require('moment');
+
+// Load environment variables
+dotenv.config();
+
+const app = express();
+const PORT = process.env.PORT || 3000;
+
+// Initialize Supabase client
+const supabase = createClient(
+  process.env.SUPABASE_URL,
+  process.env.SUPABASE_SERVICE_KEY
+);
+
+// Middleware
+app.use(helmet());
+app.use(cors());
+app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
+
+// Configure multer for image uploads
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: {
+    fileSize: 5 * 1024 * 1024, // 5MB limit
+  },
+});
+
+// WhatsApp API configuration
+const WHATSAPP_API_URL = `https://graph.facebook.com/v18.0/${process.env.WHATSAPP_PHONE_NUMBER_ID}/messages`;
+const WHATSAPP_ACCESS_TOKEN = process.env.WHATSAPP_ACCESS_TOKEN;
+
+// Gemini API configuration
+const GEMINI_API_URL = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent';
+const GEMINI_VISION_API_URL = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent';
+
+// Utility functions
+const sendWhatsAppMessage = async (to, message) => {
+  try {
+    const response = await axios.post(
+      WHATSAPP_API_URL,
+      {
+        messaging_product: 'whatsapp',
+        to: to,
+        type: 'text',
+        text: { body: message }
+      },
+      {
+        headers: {
+          'Authorization': `Bearer ${WHATSAPP_ACCESS_TOKEN}`,
+          'Content-Type': 'application/json'
+        }
+      }
+    );
+    return response.data;
+  } catch (error) {
+    console.error('Error sending WhatsApp message:', error.response?.data || error.message);
+    throw error;
+  }
+};
+
+const getGeminiResponse = async (prompt, imageData = null) => {
+  try {
+    const url = imageData ? GEMINI_VISION_API_URL : GEMINI_API_URL;
+    
+    const requestBody = {
+      contents: [{
+        parts: imageData 
+          ? [
+              { text: prompt },
+              {
+                inline_data: {
+                  mime_type: imageData.mimeType,
+                  data: imageData.data
+                }
+              }
+            ]
+          : [{ text: prompt }]
+      }],
+      generationConfig: {
+        temperature: 0.7,
+        topK: 40,
+        topP: 0.95,
+        maxOutputTokens: 1024,
+      },
+      safetySettings: [
+        {
+          category: "HARM_CATEGORY_HARASSMENT",
+          threshold: "BLOCK_MEDIUM_AND_ABOVE"
+        },
+        {
+          category: "HARM_CATEGORY_HATE_SPEECH",
+          threshold: "BLOCK_MEDIUM_AND_ABOVE"
+        },
+        {
+          category: "HARM_CATEGORY_SEXUALLY_EXPLICIT",
+          threshold: "BLOCK_MEDIUM_AND_ABOVE"
+        },
+        {
+          category: "HARM_CATEGORY_DANGEROUS_CONTENT",
+          threshold: "BLOCK_MEDIUM_AND_ABOVE"
+        }
+      ]
+    };
+
+    const response = await axios.post(
+      `${url}?key=${process.env.GEMINI_API_KEY}`,
+      requestBody,
+      {
+        headers: {
+          'Content-Type': 'application/json'
+        }
+      }
+    );
+
+    return response.data.candidates[0].content.parts[0].text;
+  } catch (error) {
+    console.error('Error getting Gemini response:', error.response?.data || error.message);
+    throw error;
+  }
+};
+
+// Patient management functions
+const getOrCreatePatient = async (phoneNumber, name = null) => {
+  try {
+    // Check if patient exists
+    const { data: existingPatient, error: fetchError } = await supabase
+      .from('patients')
+      .select('*')
+      .eq('phone_number', phoneNumber)
+      .single();
+
+    if (existingPatient) {
+      return existingPatient;
+    }
+
+    // Create new patient
+    const { data: newPatient, error: createError } = await supabase
+      .from('patients')
+      .insert({
+        phone_number: phoneNumber,
+        name: name || 'Unknown',
+        is_active: true
+      })
+      .select()
+      .single();
+
+    if (createError) throw createError;
+    return newPatient;
+  } catch (error) {
+    console.error('Error managing patient:', error);
+    throw error;
+  }
+};
+
+const saveMessage = async (patientId, chatSessionId, content, messageType, isFromPatient, aiResponse = null) => {
+  try {
+    const { error } = await supabase
+      .from('messages')
+      .insert({
+        patient_id: patientId,
+        chat_session_id: chatSessionId,
+        message_type: messageType,
+        content: content,
+        is_from_patient: isFromPatient,
+        ai_response: aiResponse
+      });
+
+    if (error) throw error;
+  } catch (error) {
+    console.error('Error saving message:', error);
+    throw error;
+  }
+};
+
+// Routes
+
+// Health check
+app.get('/', (req, res) => {
+  res.json({ 
+    status: 'Healthcare WhatsApp Bot is running!',
+    timestamp: new Date().toISOString(),
+    version: '1.0.0'
+  });
+});
+
+// WhatsApp webhook verification
+app.get('/webhook', (req, res) => {
+  const mode = req.query['hub.mode'];
+  const token = req.query['hub.verify_token'];
+  const challenge = req.query['hub.challenge'];
+
+  if (mode === 'subscribe' && token === process.env.WHATSAPP_WEBHOOK_VERIFY_TOKEN) {
+    console.log('Webhook verified successfully');
+    res.status(200).send(challenge);
+  } else {
+    console.log('Webhook verification failed');
+    res.status(403).json({ error: 'Verification failed' });
+  }
+});
+
+// WhatsApp webhook for incoming messages
+app.post('/webhook', async (req, res) => {
+  try {
+    const body = req.body;
+
+    if (body.object === 'whatsapp_business_account') {
+      body.entry?.forEach(async (entry) => {
+        const changes = entry.changes;
+        changes?.forEach(async (change) => {
+          if (change.field === 'messages') {
+            const messages = change.value.messages;
+            messages?.forEach(async (message) => {
+              await handleIncomingMessage(message, change.value.contacts?.[0]);
+            });
+          }
+        });
+      });
+    }
+
+    res.status(200).send('OK');
+  } catch (error) {
+    console.error('Webhook error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// Handle incoming WhatsApp messages
+const handleIncomingMessage = async (message, contact) => {
+  try {
+    const phoneNumber = message.from;
+    const contactName = contact?.profile?.name || 'Unknown';
+    
+    // Get or create patient
+    const patient = await getOrCreatePatient(phoneNumber, contactName);
+    
+    // Get or create chat session
+    let chatSession = await getActiveChatSession(patient.id);
+    if (!chatSession) {
+      chatSession = await createChatSession(patient.id);
+    }
+
+    let aiResponse = '';
+    let messageContent = '';
+
+    if (message.type === 'text') {
+      messageContent = message.text.body;
+      
+      // Create medical context prompt
+      const medicalPrompt = `You are a helpful healthcare assistant. The user is asking: "${messageContent}"
+
+Please provide helpful, accurate medical information. If this is a medical emergency, advise them to contact emergency services immediately. Keep responses concise and professional.
+
+User context:
+- Name: ${patient.name}
+- Phone: ${patient.phone_number}
+- Age: ${patient.age || 'Not specified'}
+- Allergies: ${patient.allergies?.join(', ') || 'None specified'}
+- Chronic conditions: ${patient.chronic_conditions?.join(', ') || 'None specified'}`;
+
+      aiResponse = await getGeminiResponse(medicalPrompt);
+      
+    } else if (message.type === 'image') {
+      // Handle image messages
+      const imageId = message.image.id;
+      const imageUrl = `https://graph.facebook.com/v18.0/${imageId}`;
+      
+      // Download image
+      const imageResponse = await axios.get(imageUrl, {
+        headers: { 'Authorization': `Bearer ${WHATSAPP_ACCESS_TOKEN}` },
+        responseType: 'arraybuffer'
+      });
+      
+      const imageBuffer = Buffer.from(imageResponse.data);
+      const base64Image = imageBuffer.toString('base64');
+      
+      const visionPrompt = `Analyze this medical image and provide helpful insights. Look for any visible symptoms, conditions, or health concerns. Provide professional medical advice based on what you can observe. If this appears to be a serious medical condition, advise immediate medical attention.`;
+      
+      aiResponse = await getGeminiResponse(visionPrompt, {
+        mimeType: 'image/jpeg',
+        data: base64Image
+      });
+      
+      messageContent = '[Image received]';
+    }
+
+    // Save message to database
+    await saveMessage(patient.id, chatSession.id, messageContent, message.type, true, aiResponse);
+
+    // Send AI response
+    await sendWhatsAppMessage(phoneNumber, aiResponse);
+
+    // Update session
+    await updateChatSession(chatSession.id, messageContent, aiResponse);
+
+  } catch (error) {
+    console.error('Error handling message:', error);
+    
+    // Send error message to user
+    try {
+      await sendWhatsAppMessage(message.from, 'I apologize, but I encountered an error processing your message. Please try again or contact support if the issue persists.');
+    } catch (sendError) {
+      console.error('Error sending error message:', sendError);
+    }
+  }
+};
+
+// Helper functions for chat sessions
+const getActiveChatSession = async (patientId) => {
+  const { data } = await supabase
+    .from('chat_sessions')
+    .select('*')
+    .eq('patient_id', patientId)
+    .is('session_end', null)
+    .order('session_start', { ascending: false })
+    .limit(1)
+    .single();
+  
+  return data;
+};
+
+const createChatSession = async (patientId) => {
+  const { data, error } = await supabase
+    .from('chat_sessions')
+    .insert({
+      patient_id: patientId,
+      session_start: new Date().toISOString()
+    })
+    .select()
+    .single();
+  
+  if (error) throw error;
+  return data;
+};
+
+const updateChatSession = async (sessionId, userMessage, aiResponse) => {
+  const { error } = await supabase
+    .from('chat_sessions')
+    .update({
+      message_count: supabase.raw('message_count + 1'),
+      topics_discussed: supabase.raw(`array_append(topics_discussed, '${extractTopics(userMessage)}')`)
+    })
+    .eq('id', sessionId);
+  
+  if (error) throw error;
+};
+
+const extractTopics = (message) => {
+  // Simple topic extraction - can be enhanced with NLP
+  const medicalKeywords = ['pain', 'fever', 'headache', 'cough', 'vaccine', 'appointment', 'medicine', 'allergy', 'blood pressure', 'diabetes'];
+  const foundTopics = medicalKeywords.filter(keyword => 
+    message.toLowerCase().includes(keyword)
+  );
+  return foundTopics.length > 0 ? foundTopics[0] : 'general';
+};
+
+// Appointment reminder cron job (runs daily at 9 AM)
+cron.schedule('0 9 * * *', async () => {
+  try {
+    console.log('Running appointment reminder job...');
+    
+    const tomorrow = moment().add(1, 'day').format('YYYY-MM-DD');
+    
+    const { data: appointments, error } = await supabase
+      .from('appointments')
+      .select(`
+        *,
+        patients!inner(phone_number, name)
+      `)
+      .eq('appointment_date', tomorrow)
+      .eq('reminder_sent', false)
+      .eq('status', 'scheduled');
+
+    if (error) throw error;
+
+    for (const appointment of appointments) {
+      const reminderMessage = `Hello ${appointment.patients.name}! 
+
+This is a reminder that you have an appointment scheduled for tomorrow:
+📅 Date: ${moment(appointment.appointment_date).format('MMMM Do, YYYY')}
+🕐 Time: ${appointment.appointment_time}
+👨‍⚕️ Doctor: ${appointment.doctor_name || 'TBD'}
+🏥 Location: ${appointment.hospital_name || 'TBD'}
+📋 Purpose: ${appointment.purpose || 'General checkup'}
+
+Please arrive 15 minutes early. If you need to reschedule, please contact us.
+
+Best regards,
+Healthcare Bot Team`;
+
+      await sendWhatsAppMessage(appointment.patients.phone_number, reminderMessage);
+      
+      // Mark reminder as sent
+      await supabase
+        .from('appointments')
+        .update({ reminder_sent: true })
+        .eq('id', appointment.id);
+    }
+
+    console.log(`Sent ${appointments.length} appointment reminders`);
+  } catch (error) {
+    console.error('Error in appointment reminder job:', error);
+  }
+});
+
+// Vaccination reminder cron job (runs weekly on Mondays at 10 AM)
+cron.schedule('0 10 * * 1', async () => {
+  try {
+    console.log('Running vaccination reminder job...');
+    
+    const { data: patients, error } = await supabase
+      .from('patients')
+      .select('*')
+      .eq('is_active', true);
+
+    if (error) throw error;
+
+    for (const patient of patients) {
+      // Check for upcoming vaccinations based on age
+      const patientAgeMonths = patient.age ? patient.age * 12 : 0;
+      
+      const { data: upcomingVaccines, error: vaccineError } = await supabase
+        .from('vaccination_schedule')
+        .select('*')
+        .gte('recommended_age_months', patientAgeMonths)
+        .lte('recommended_age_months', patientAgeMonths + 3)
+        .eq('is_mandatory', true);
+
+      if (vaccineError) throw vaccineError;
+
+      if (upcomingVaccines.length > 0) {
+        const vaccineNames = upcomingVaccines.map(v => v.vaccine_name).join(', ');
+        
+        const reminderMessage = `Hello ${patient.name}!
+
+📅 Vaccination Reminder:
+You have upcoming vaccinations due:
+${vaccineNames}
+
+Please schedule an appointment with your healthcare provider to receive these important vaccinations.
+
+Stay healthy! 💉
+Healthcare Bot Team`;
+
+        await sendWhatsAppMessage(patient.phone_number, reminderMessage);
+      }
+    }
+
+    console.log('Vaccination reminders sent');
+  } catch (error) {
+    console.error('Error in vaccination reminder job:', error);
+  }
+});
+
+// API Routes for patient management
+app.get('/api/patients/:phone', async (req, res) => {
+  try {
+    const { phone } = req.params;
+    const { data, error } = await supabase
+      .from('patients')
+      .select('*')
+      .eq('phone_number', phone)
+      .single();
+
+    if (error) throw error;
+    res.json(data);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.post('/api/patients', async (req, res) => {
+  try {
+    const { data, error } = await supabase
+      .from('patients')
+      .insert(req.body)
+      .select()
+      .single();
+
+    if (error) throw error;
+    res.json(data);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.get('/api/appointments/:patientId', async (req, res) => {
+  try {
+    const { patientId } = req.params;
+    const { data, error } = await supabase
+      .from('appointments')
+      .select('*')
+      .eq('patient_id', patientId)
+      .order('appointment_date', { ascending: true });
+
+    if (error) throw error;
+    res.json(data);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Error handling middleware
+app.use((error, req, res, next) => {
+  console.error('Unhandled error:', error);
+  res.status(500).json({ error: 'Internal server error' });
+});
+
+// Start server
+app.listen(PORT, () => {
+  console.log(`🚀 Healthcare WhatsApp Bot server running on port ${PORT}`);
+  console.log(`📱 Webhook URL: https://your-domain.com/webhook`);
+  console.log(`🔗 Health check: http://localhost:${PORT}/`);
+});
+
+module.exports = app;
