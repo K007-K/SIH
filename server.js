@@ -354,16 +354,29 @@ const createChatSession = async (patientId) => {
   return data;
 };
 
-const updateChatSession = async (sessionId, userMessage, aiResponse) => {
-  const { error } = await supabase
+const updateChatSession = async (sessionId, userMessage, _aiResponse) => {
+  // Read current values, then update safely (supabase-js v2 has no raw)
+  const { data: session, error: fetchError } = await supabase
     .from('chat_sessions')
-    .update({
-      message_count: supabase.raw('message_count + 1'),
-      topics_discussed: supabase.raw(`array_append(topics_discussed, '${extractTopics(userMessage)}')`)
-    })
+    .select('message_count, topics_discussed')
+    .eq('id', sessionId)
+    .single();
+
+  if (fetchError) throw fetchError;
+
+  const nextCount = (session?.message_count || 0) + 1;
+  const existingTopics = Array.isArray(session?.topics_discussed)
+    ? [...session.topics_discussed]
+    : [];
+  const topic = extractTopics(userMessage);
+  existingTopics.push(topic);
+
+  const { error: updateError } = await supabase
+    .from('chat_sessions')
+    .update({ message_count: nextCount, topics_discussed: existingTopics })
     .eq('id', sessionId);
-  
-  if (error) throw error;
+
+  if (updateError) throw updateError;
 };
 
 const extractTopics = (message) => {
