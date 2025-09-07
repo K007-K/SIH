@@ -34,8 +34,8 @@ const upload = multer({
   },
 });
 
-// WhatsApp API configuration
-const WHATSAPP_API_URL = `https://graph.facebook.com/v18.0/${process.env.WHATSAPP_PHONE_NUMBER_ID}/messages`;
+// WhatsApp API configuration (use latest supported version)
+const WHATSAPP_API_URL = `https://graph.facebook.com/v23.0/${process.env.WHATSAPP_PHONE_NUMBER_ID}/messages`;
 const WHATSAPP_ACCESS_TOKEN = process.env.WHATSAPP_ACCESS_TOKEN;
 
 // Gemini API configuration
@@ -221,6 +221,19 @@ app.post('/webhook', async (req, res) => {
             messages?.forEach(async (message) => {
               await handleIncomingMessage(message, change.value.contacts?.[0]);
             });
+
+            // Delivery/status updates (ack, delivered, read, failed)
+            const statuses = change.value.statuses;
+            statuses?.forEach((status) => {
+              console.log('WhatsApp status update:', {
+                id: status.id,
+                status: status.status,
+                timestamp: status.timestamp,
+                recipient_id: status.recipient_id,
+                conversation: status.conversation,
+                pricing: status.pricing
+              });
+            });
           }
         });
       });
@@ -271,7 +284,7 @@ User context:
     } else if (message.type === 'image') {
       // Handle image messages
       const imageId = message.image.id;
-      const imageUrl = `https://graph.facebook.com/v18.0/${imageId}`;
+      const imageUrl = `https://graph.facebook.com/v23.0/${imageId}`;
       
       // Download image
       const imageResponse = await axios.get(imageUrl, {
@@ -505,6 +518,37 @@ app.get('/api/appointments/:patientId', async (req, res) => {
     res.json(data);
   } catch (error) {
     res.status(500).json({ error: error.message });
+  }
+});
+
+// Admin/test endpoint: send a template message
+app.post('/admin/send-template', async (req, res) => {
+  try {
+    const { to, template, language = 'en_US' } = req.body;
+    if (!to || !template) {
+      return res.status(400).json({ error: 'Missing required fields: to, template' });
+    }
+
+    const response = await axios.post(
+      WHATSAPP_API_URL,
+      {
+        messaging_product: 'whatsapp',
+        to,
+        type: 'template',
+        template: { name: template, language: { code: language } }
+      },
+      {
+        headers: {
+          'Authorization': `Bearer ${WHATSAPP_ACCESS_TOKEN}`,
+          'Content-Type': 'application/json'
+        }
+      }
+    );
+
+    res.json(response.data);
+  } catch (error) {
+    console.error('Error sending template:', error.response?.data || error.message);
+    res.status(500).json({ error: error.response?.data || error.message });
   }
 });
 
