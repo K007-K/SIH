@@ -200,6 +200,11 @@ const GEMINI_VISION_API_URL = 'https://generativelanguage.googleapis.com/v1beta/
 // OpenAI API configuration for speech-to-text
 const OPENAI_API_URL = 'https://api.openai.com/v1/audio/transcriptions';
 
+// Hugging Face API configuration for Llama 3.1 via Featherless AI
+const FEATHERLESS_API_URL = 'https://api.featherless.ai/v1/chat/completions';
+const LLAMA_MODEL = 'meta-llama/Llama-3.1-8B-Instruct';
+const AI_MODEL_PROVIDER = process.env.AI_MODEL_PROVIDER || 'hybrid';
+
 // Utility functions
 const sendWhatsAppMessage = async (to, message) => {
   try {
@@ -317,6 +322,111 @@ const getGeminiResponse = async (prompt, imageData = null) => {
     } else {
       throw new Error('Failed to get response from Gemini API. Please try again.');
     }
+  }
+};
+
+// Llama 3.1 response function using Featherless AI provider
+const getLlamaResponse = async (prompt, imageData = null) => {
+  try {
+    console.log('Making Llama 3.1-8B API request via Featherless AI...');
+    
+    if (!process.env.HF_TOKEN) {
+      console.log('HF_TOKEN not configured, falling back to Gemini');
+      return await getGeminiResponse(prompt, imageData);
+    }
+
+    // OpenAI-compatible chat format for Featherless AI
+    const messages = [
+      {
+        role: "system",
+        content: "You are a multilingual healthcare assistant specializing in Indian languages and medical guidance. Provide accurate, empathetic, and culturally appropriate health advice. Always recommend consulting healthcare professionals for serious conditions. Keep responses concise and helpful."
+      },
+      {
+        role: "user", 
+        content: prompt
+      }
+    ];
+
+    const requestBody = {
+      model: LLAMA_MODEL,
+      messages: messages,
+      max_tokens: 400,
+      temperature: 0.7,
+      top_p: 0.9,
+      stream: false
+    };
+
+    console.log('Featherless API request:', JSON.stringify(requestBody, null, 2));
+
+    const response = await axios.post(FEATHERLESS_API_URL, requestBody, {
+      headers: {
+        'Authorization': `Bearer ${process.env.HF_TOKEN}`,
+        'Content-Type': 'application/json'
+      },
+      timeout: 30000
+    });
+
+    console.log('Featherless API response:', JSON.stringify(response.data, null, 2));
+
+    let responseText = '';
+    if (response.data?.choices?.[0]?.message?.content) {
+      responseText = response.data.choices[0].message.content;
+    } else if (response.data?.choices?.[0]?.text) {
+      responseText = response.data.choices[0].text;
+    }
+
+    if (!responseText || responseText.trim().length === 0) {
+      console.log('Empty response from Llama, falling back to Gemini');
+      return await getGeminiResponse(prompt, imageData);
+    }
+
+    console.log('Llama 3.1-8B response successful:', responseText.substring(0, 100) + '...');
+    return responseText.trim();
+
+  } catch (error) {
+    console.error('Error with Featherless AI:', {
+      message: error.message,
+      status: error.response?.status,
+      statusText: error.response?.statusText,
+      data: error.response?.data
+    });
+
+    // Fallback to Gemini on Llama failure
+    console.log('Falling back to Gemini due to Featherless AI error');
+    return await getGeminiResponse(prompt, imageData);
+  }
+};
+
+// Hybrid AI response function - chooses best model based on query
+const getAIResponse = async (prompt, imageData = null, language = 'en') => {
+  try {
+    console.log(`Getting AI response with provider: ${AI_MODEL_PROVIDER}, language: ${language}`);
+
+    switch (AI_MODEL_PROVIDER.toLowerCase()) {
+      case 'llama':
+        return await getLlamaResponse(prompt, imageData);
+      
+      case 'gemini':
+        return await getGeminiResponse(prompt, imageData);
+      
+      case 'hybrid':
+      default:
+        // Use Llama for multilingual queries, Gemini for images
+        if (imageData) {
+          console.log('Using Gemini for image analysis');
+          return await getGeminiResponse(prompt, imageData);
+        } else if (language !== 'en' && ['hi', 'te', 'ta', 'bn', 'mr', 'gu', 'kn', 'ml', 'pa', 'or'].includes(language)) {
+          console.log('Using Llama for multilingual text query');
+          return await getLlamaResponse(prompt, imageData);
+        } else {
+          console.log('Using Gemini for English text query');
+          return await getGeminiResponse(prompt, imageData);
+        }
+    }
+  } catch (error) {
+    console.error('Error in hybrid AI response:', error.message);
+    // Final fallback to Gemini
+    return await getGeminiResponse(prompt, imageData);
   }
 };
 
@@ -548,7 +658,7 @@ const handleIncomingMessage = async (message, contact) => {
       const detectedLanguage = detectLanguage(messageContent);
       const medicalPrompt = createHealthcarePrompt(messageContent, patient, detectedLanguage);
 
-      aiResponse = await getGeminiResponse(medicalPrompt);
+      aiResponse = await getAIResponse(medicalPrompt, null, detectedLanguage);
       
     } else if (message.type === 'audio') {
       // Handle audio messages
@@ -607,9 +717,10 @@ const handleIncomingMessage = async (message, contact) => {
           } else {
             // Process transcribed text as a regular text message
             const detectedLanguage = detectLanguage(transcription);
-            const medicalPrompt = createHealthcarePrompt(transcription, patient, detectedLanguage);
+            const imagePrompt = createImageAnalysisPrompt(detectedLanguage);
             
-            aiResponse = await getGeminiResponse(medicalPrompt);
+            // Always use Gemini for image analysis as it has vision capabilities
+            aiResponse = await getGeminiResponse(imagePrompt, base64Audio);
             messageContent = `[Audio transcribed: "${transcription}"]`;
             console.log('Audio processing completed successfully');
           }
