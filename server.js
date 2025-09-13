@@ -197,8 +197,8 @@ const WHATSAPP_ACCESS_TOKEN = process.env.WHATSAPP_ACCESS_TOKEN;
 const GEMINI_API_URL = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent';
 const GEMINI_VISION_API_URL = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent';
 
-// Google Speech-to-Text API configuration
-const SPEECH_TO_TEXT_API_URL = 'https://speech.googleapis.com/v1/speech:recognize';
+// OpenAI API configuration for speech-to-text
+const OPENAI_API_URL = 'https://api.openai.com/v1/audio/transcriptions';
 
 // Utility functions
 const sendWhatsAppMessage = async (to, message) => {
@@ -320,21 +320,88 @@ const getGeminiResponse = async (prompt, imageData = null) => {
   }
 };
 
-// Audio transcription function with fallback approach
+// Audio transcription function using OpenAI Whisper API
 const transcribeAudio = async (base64Audio, mimeType) => {
   try {
-    console.log(`Starting audio transcription with mimeType: ${mimeType}`);
+    console.log(`Starting audio transcription with OpenAI Whisper, mimeType: ${mimeType}`);
     
-    // For now, return a helpful message until Speech-to-Text API is enabled
-    // This prevents the audio feature from crashing and provides user feedback
-    console.log('Audio transcription service not yet configured');
+    if (!process.env.OPENAI_API_KEY) {
+      console.log('OpenAI API key not configured');
+      return 'Audio message received. Speech-to-text service is currently being configured. Please send your message as text for now.';
+    }
     
-    // Return a message indicating audio was received but not transcribed
-    return 'Audio message received. Speech-to-text service is currently being configured. Please send your message as text for now.';
+    // Convert base64 to buffer
+    const audioBuffer = Buffer.from(base64Audio, 'base64');
+    
+    // Determine file extension based on MIME type
+    let fileExtension = 'ogg';
+    switch (mimeType.toLowerCase()) {
+      case 'audio/mpeg':
+      case 'audio/mp3':
+        fileExtension = 'mp3';
+        break;
+      case 'audio/mp4':
+        fileExtension = 'm4a';
+        break;
+      case 'audio/wav':
+        fileExtension = 'wav';
+        break;
+      case 'audio/amr':
+        fileExtension = 'amr';
+        break;
+      default:
+        fileExtension = 'ogg';
+    }
+    
+    // Create FormData for OpenAI API
+    const FormData = require('form-data');
+    const form = new FormData();
+    
+    form.append('file', audioBuffer, {
+      filename: `audio.${fileExtension}`,
+      contentType: mimeType
+    });
+    form.append('model', 'whisper-1');
+    form.append('language', 'en'); // Primary language, Whisper can auto-detect
+    form.append('response_format', 'text');
+    
+    console.log(`Making OpenAI Whisper API request with file extension: ${fileExtension}`);
+    
+    const response = await axios.post(OPENAI_API_URL, form, {
+      headers: {
+        'Authorization': `Bearer ${process.env.OPENAI_API_KEY}`,
+        ...form.getHeaders()
+      },
+      timeout: 60000 // 60 second timeout for transcription
+    });
+
+    const transcription = response.data.trim();
+    
+    if (!transcription || transcription.length === 0) {
+      console.log('No transcription results returned from OpenAI');
+      return '';
+    }
+
+    console.log(`OpenAI transcription successful: "${transcription}"`);
+    return transcription;
 
   } catch (error) {
-    console.error('Error in audio transcription:', error.message);
-    throw new Error('Audio transcription service temporarily unavailable. Please send text messages.');
+    console.error('Error transcribing audio with OpenAI:', {
+      message: error.message,
+      status: error.response?.status,
+      statusText: error.response?.statusText,
+      data: error.response?.data
+    });
+    
+    if (error.response?.status === 400) {
+      throw new Error('Invalid audio format for transcription. Please try a different audio format.');
+    } else if (error.response?.status === 401) {
+      throw new Error('OpenAI API access denied. Please check your API key.');
+    } else if (error.response?.status === 429) {
+      throw new Error('OpenAI API rate limit exceeded. Please try again later.');
+    } else {
+      throw new Error('Failed to transcribe audio. Please try again.');
+    }
   }
 };
 
@@ -533,10 +600,10 @@ const handleIncomingMessage = async (message, contact) => {
           const transcription = await transcribeAudio(base64Audio, audioMimeType);
           console.log(`Audio transcribed: "${transcription}"`);
           
-          if (!transcription || transcription.includes('Speech-to-text service is currently being configured')) {
-            // Handle the case where transcription service is not yet available
-            aiResponse = transcription || 'I received your voice message but cannot transcribe it yet. Please send your health question as a text message, and I\'ll be happy to help you.';
-            messageContent = '[Audio received - transcription service pending]';
+          if (!transcription || transcription.trim().length === 0 || transcription.includes('Speech-to-text service is currently being configured')) {
+            // Handle the case where transcription service is not yet available or failed
+            aiResponse = transcription || 'I received your voice message but could not transcribe it. Please send your health question as a text message, and I\'ll be happy to help you.';
+            messageContent = '[Audio received - transcription failed or pending]';
           } else {
             // Process transcribed text as a regular text message
             const detectedLanguage = detectLanguage(transcription);
