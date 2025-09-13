@@ -7,6 +7,7 @@ const { createClient } = require('@supabase/supabase-js');
 const multer = require('multer');
 const cron = require('node-cron');
 const moment = require('moment');
+const TranslationService = require('./translation-service');
 
 // Load environment variables
 dotenv.config();
@@ -19,6 +20,9 @@ const supabase = createClient(
   process.env.SUPABASE_URL,
   process.env.SUPABASE_SERVICE_KEY
 );
+
+// Initialize Translation Service
+const translationService = new TranslationService();
 
 // Enhanced language detection function with 15+ Indian languages
 const detectLanguage = (text) => {
@@ -422,9 +426,9 @@ const handleIncomingMessage = async (message, contact) => {
     if (message.type === 'text') {
       messageContent = message.text.body;
       
-      // Detect language and create optimized healthcare prompt
-      const detectedLanguage = detectLanguage(messageContent);
-      const medicalPrompt = createHealthcarePrompt(messageContent, patient, detectedLanguage);
+      // Detect language using translation service (with HF fallback)
+      const detectedLanguage = await translationService.detectLanguage(messageContent);
+      const medicalPrompt = await translationService.createHealthcarePrompt(messageContent, patient, detectedLanguage);
 
       aiResponse = await getGeminiResponse(medicalPrompt);
       
@@ -443,7 +447,7 @@ const handleIncomingMessage = async (message, contact) => {
       const base64Image = imageBuffer.toString('base64');
       
       // Detect language for image analysis
-      const detectedLanguage = detectLanguage(messageContent || '');
+      const detectedLanguage = await translationService.detectLanguage(messageContent || '');
       const visionPrompt = createImageAnalysisPrompt(detectedLanguage);
       
       aiResponse = await getGeminiResponse(visionPrompt, {
