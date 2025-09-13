@@ -20,6 +20,98 @@ const supabase = createClient(
   process.env.SUPABASE_SERVICE_KEY
 );
 
+// Language detection function
+const detectLanguage = (text) => {
+  // Simple language detection based on character patterns
+  const hindiPattern = /[\u0900-\u097F]/;
+  const tamilPattern = /[\u0B80-\u0BFF]/;
+  const teluguPattern = /[\u0C00-\u0C7F]/;
+  const bengaliPattern = /[\u0980-\u09FF]/;
+  
+  if (hindiPattern.test(text)) return 'hi';
+  if (tamilPattern.test(text)) return 'ta';
+  if (teluguPattern.test(text)) return 'te';
+  if (bengaliPattern.test(text)) return 'bn';
+  
+  // Default to English
+  return 'en';
+};
+
+// Create optimized healthcare prompt
+const createHealthcarePrompt = (userMessage, patient, language) => {
+  const languageInstructions = {
+    'hi': 'Respond in Hindi (हिंदी). Use simple, clear Hindi that rural populations can understand.',
+    'ta': 'Respond in Tamil (தமிழ்). Use simple, clear Tamil that rural populations can understand.',
+    'te': 'Respond in Telugu (తెలుగు). Use simple, clear Telugu that rural populations can understand.',
+    'bn': 'Respond in Bengali (বাংলা). Use simple, clear Bengali that rural populations can understand.',
+    'en': 'Respond in English. Use simple, clear English that rural populations can understand.'
+  };
+
+  return `You are a multilingual public health assistant designed to support rural and semi-urban populations.
+
+${languageInstructions[language] || languageInstructions['en']}
+
+Your role is to provide **clear, simple, and friendly answers** about:
+- Preventive healthcare practices
+- Common disease symptoms and when to seek help
+- Vaccination schedules and reminders
+- Health alerts and outbreak advisories
+- Nearby healthcare facilities and official helplines
+
+### Response Guidelines
+- Always respond in **short, simple sentences**. Avoid medical jargon unless necessary; if used, explain it in plain language.
+- Structure replies with **bullets or numbered steps** when giving instructions.
+- Be **empathetic, polite, and respectful**, like a community health worker talking to a neighbor.
+- **Stay strictly on-topic**: only answer questions related to healthcare, disease awareness, prevention, vaccination, or outbreaks.
+- If the user asks about unrelated topics (politics, sports, entertainment, personal advice, etc.), reply with:
+  "I can only help with health-related questions about diseases, prevention, vaccination, and safety. Please ask me about those."
+- Always include a **safety disclaimer** for critical or emergency cases, e.g.:
+  "If you have severe symptoms, please call your local health center or emergency number immediately."
+- Keep answers **under 80–100 words** unless the user explicitly asks for more details.
+
+### Tone
+- Friendly, encouraging, non-judgmental.
+- Example style: "Hello! I can help you understand symptoms and vaccines. What would you like to know today?"
+
+### User Message
+"${userMessage}"
+
+### User Context
+- Name: ${patient.name}
+- Phone: ${patient.phone_number}
+- Age: ${patient.age || 'Not specified'}
+- Allergies: ${patient.allergies?.join(', ') || 'None specified'}
+- Chronic conditions: ${patient.chronic_conditions?.join(', ') || 'None specified'}
+
+Please provide a helpful, accurate response in the appropriate language.`;
+};
+
+// Create image analysis prompt
+const createImageAnalysisPrompt = (language) => {
+  const languageInstructions = {
+    'hi': 'Respond in Hindi (हिंदी). Use simple, clear Hindi that rural populations can understand.',
+    'ta': 'Respond in Tamil (தமிழ்). Use simple, clear Tamil that rural populations can understand.',
+    'te': 'Respond in Telugu (తెలుగు). Use simple, clear Telugu that rural populations can understand.',
+    'bn': 'Respond in Bengali (বাংলা). Use simple, clear Bengali that rural populations can understand.',
+    'en': 'Respond in English. Use simple, clear English that rural populations can understand.'
+  };
+
+  return `You are a multilingual public health assistant analyzing a medical image.
+
+${languageInstructions[language] || languageInstructions['en']}
+
+### Image Analysis Guidelines
+- Look for visible symptoms, skin conditions, wounds, or health concerns
+- Provide simple, clear observations in the appropriate language
+- Use bullet points for easy reading
+- Be empathetic and reassuring
+- If serious condition detected, advise immediate medical attention
+- Keep response under 80-100 words
+- Include safety disclaimer: "If symptoms are severe, please contact your local health center immediately"
+
+Analyze this medical image and provide helpful insights.`;
+};
+
 // Middleware
 app.use(helmet());
 app.use(cors());
@@ -267,17 +359,9 @@ const handleIncomingMessage = async (message, contact) => {
     if (message.type === 'text') {
       messageContent = message.text.body;
       
-      // Create medical context prompt
-      const medicalPrompt = `You are a helpful healthcare assistant. The user is asking: "${messageContent}"
-
-Please provide helpful, accurate medical information. If this is a medical emergency, advise them to contact emergency services immediately. Keep responses concise and professional.
-
-User context:
-- Name: ${patient.name}
-- Phone: ${patient.phone_number}
-- Age: ${patient.age || 'Not specified'}
-- Allergies: ${patient.allergies?.join(', ') || 'None specified'}
-- Chronic conditions: ${patient.chronic_conditions?.join(', ') || 'None specified'}`;
+      // Detect language and create optimized healthcare prompt
+      const detectedLanguage = detectLanguage(messageContent);
+      const medicalPrompt = createHealthcarePrompt(messageContent, patient, detectedLanguage);
 
       aiResponse = await getGeminiResponse(medicalPrompt);
       
@@ -295,7 +379,9 @@ User context:
       const imageBuffer = Buffer.from(imageResponse.data);
       const base64Image = imageBuffer.toString('base64');
       
-      const visionPrompt = `Analyze this medical image and provide helpful insights. Look for any visible symptoms, conditions, or health concerns. Provide professional medical advice based on what you can observe. If this appears to be a serious medical condition, advise immediate medical attention.`;
+      // Detect language for image analysis
+      const detectedLanguage = detectLanguage(messageContent || '');
+      const visionPrompt = createImageAnalysisPrompt(detectedLanguage);
       
       aiResponse = await getGeminiResponse(visionPrompt, {
         mimeType: 'image/jpeg',
