@@ -197,6 +197,9 @@ const WHATSAPP_ACCESS_TOKEN = process.env.WHATSAPP_ACCESS_TOKEN;
 const GEMINI_API_URL = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent';
 const GEMINI_VISION_API_URL = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent';
 
+// Google Speech-to-Text API configuration
+const SPEECH_TO_TEXT_API_URL = 'https://speech.googleapis.com/v1/speech:recognize';
+
 // Utility functions
 const sendWhatsAppMessage = async (to, message) => {
   try {
@@ -314,6 +317,24 @@ const getGeminiResponse = async (prompt, imageData = null) => {
     } else {
       throw new Error('Failed to get response from Gemini API. Please try again.');
     }
+  }
+};
+
+// Audio transcription function with fallback approach
+const transcribeAudio = async (base64Audio, mimeType) => {
+  try {
+    console.log(`Starting audio transcription with mimeType: ${mimeType}`);
+    
+    // For now, return a helpful message until Speech-to-Text API is enabled
+    // This prevents the audio feature from crashing and provides user feedback
+    console.log('Audio transcription service not yet configured');
+    
+    // Return a message indicating audio was received but not transcribed
+    return 'Audio message received. Speech-to-text service is currently being configured. Please send your message as text for now.';
+
+  } catch (error) {
+    console.error('Error in audio transcription:', error.message);
+    throw new Error('Audio transcription service temporarily unavailable. Please send text messages.');
   }
 };
 
@@ -461,6 +482,98 @@ const handleIncomingMessage = async (message, contact) => {
       const medicalPrompt = createHealthcarePrompt(messageContent, patient, detectedLanguage);
 
       aiResponse = await getGeminiResponse(medicalPrompt);
+      
+    } else if (message.type === 'audio') {
+      // Handle audio messages
+      console.log('Raw audio message received:', JSON.stringify(message, null, 2));
+      
+      try {
+        const audioId = message.audio?.id;
+        const audioMimeType = message.audio?.mime_type || 'audio/ogg';
+        
+        if (!audioId) {
+          throw new Error('No audio ID found in message');
+        }
+        
+        console.log(`Processing audio: ID=${audioId}, MimeType=${audioMimeType}`);
+        
+        // Validate supported audio formats
+        const supportedAudioFormats = ['audio/ogg', 'audio/mpeg', 'audio/mp4', 'audio/amr', 'audio/wav'];
+        if (!supportedAudioFormats.includes(audioMimeType.toLowerCase())) {
+          aiResponse = 'Sorry, I can only process OGG, MP3, MP4, AMR, and WAV audio formats. Please send your voice message in one of these formats.';
+          messageContent = `[Unsupported audio format: ${audioMimeType}]`;
+        } else {
+          // First get the audio URL from WhatsApp API
+          const audioInfoUrl = `https://graph.facebook.com/v23.0/${audioId}`;
+          console.log(`Getting audio info from: ${audioInfoUrl}`);
+          
+          const audioInfoResponse = await axios.get(audioInfoUrl, {
+            headers: { 'Authorization': `Bearer ${WHATSAPP_ACCESS_TOKEN}` },
+            timeout: 15000
+          });
+          
+          const audioUrl = audioInfoResponse.data.url;
+          console.log(`Downloading audio from: ${audioUrl}`);
+          
+          // Download audio file
+          const audioResponse = await axios.get(audioUrl, {
+            headers: { 'Authorization': `Bearer ${WHATSAPP_ACCESS_TOKEN}` },
+            responseType: 'arraybuffer',
+            timeout: 30000
+          });
+          
+          console.log(`Audio downloaded successfully. Size: ${audioResponse.data.byteLength} bytes`);
+          
+          const audioBuffer = Buffer.from(audioResponse.data);
+          const base64Audio = audioBuffer.toString('base64');
+          
+          console.log(`Audio converted to base64. Length: ${base64Audio.length} characters`);
+          
+          // Transcribe audio using Google Speech-to-Text API
+          const transcription = await transcribeAudio(base64Audio, audioMimeType);
+          console.log(`Audio transcribed: "${transcription}"`);
+          
+          if (!transcription || transcription.includes('Speech-to-text service is currently being configured')) {
+            // Handle the case where transcription service is not yet available
+            aiResponse = transcription || 'I received your voice message but cannot transcribe it yet. Please send your health question as a text message, and I\'ll be happy to help you.';
+            messageContent = '[Audio received - transcription service pending]';
+          } else {
+            // Process transcribed text as a regular text message
+            const detectedLanguage = detectLanguage(transcription);
+            const medicalPrompt = createHealthcarePrompt(transcription, patient, detectedLanguage);
+            
+            aiResponse = await getGeminiResponse(medicalPrompt);
+            messageContent = `[Audio transcribed: "${transcription}"]`;
+            console.log('Audio processing completed successfully');
+          }
+        }
+        
+      } catch (audioError) {
+        console.error('Detailed audio processing error:', {
+          error: audioError.message,
+          stack: audioError.stack,
+          response: audioError.response?.data,
+          status: audioError.response?.status,
+          url: audioError.config?.url
+        });
+        
+        // Provide specific error messages based on the error type
+        if (audioError.response?.status === 400) {
+          aiResponse = 'Unable to access the audio message. This might be due to WhatsApp API permissions or the audio has expired. Please try sending the voice message again.';
+        } else if (audioError.response?.status === 403) {
+          aiResponse = 'Access denied when trying to download the audio. Please check if the audio is still available and try again.';
+        } else if (audioError.response?.status === 404) {
+          aiResponse = 'The audio message could not be found. It may have expired. Please try sending the voice message again.';
+        } else if (audioError.message.includes('timeout')) {
+          aiResponse = 'The audio download timed out. Please try sending a shorter voice message or try again later.';
+        } else if (audioError.message.includes('transcription')) {
+          aiResponse = 'There was an issue transcribing your voice message. Please try speaking more clearly or send a text message instead.';
+        } else {
+          aiResponse = 'I encountered an error while processing your voice message. Please try sending it again or use text instead.';
+        }
+        
+        messageContent = `[Audio processing failed: ${audioError.message}]`;
+      }
       
     } else if (message.type === 'image') {
       // Handle image messages
