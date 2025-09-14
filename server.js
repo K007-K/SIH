@@ -6,7 +6,9 @@ const {
   getGeminiResponse, 
   transcribeAudio, 
   generateLanguageButtons, 
-  generateMoreLanguageButtons,
+  generateRegionalLanguageButtons,
+  generateScriptTypeButtons,
+  generateHindiScriptButtons,
   getSystemPrompt 
 } = require('./utils/aiUtils');
 const { createClient } = require('@supabase/supabase-js');
@@ -260,27 +262,79 @@ app.post('/webhook', async (req, res) => {
 const handleInteractiveMessage = async (message, contact) => {
   try {
     const phoneNumber = message.from;
-    const interactive = message.interactive;
+    const interactiveType = message.interactive?.type;
     
-    if (interactive.type === 'button_reply') {
-      const buttonId = interactive.button_reply.id;
+    if (interactiveType === 'button_reply') {
+      const buttonId = message.interactive.button_reply.id;
       
-      // Handle language selection
+      // Handle regional languages button
+      if (buttonId === 'regional_langs') {
+        const regionalButtons = generateRegionalLanguageButtons();
+        await sendWhatsAppInteractiveMessage(phoneNumber, regionalButtons);
+        return;
+      }
+      
+      // Handle back to languages button
+      if (buttonId === 'back_to_languages') {
+        const languageButtons = generateLanguageButtons();
+        await sendWhatsAppInteractiveMessage(phoneNumber, languageButtons);
+        return;
+      }
+      
+      // Handle script selection for regional languages
+      if (buttonId === 'lang_te' || buttonId === 'lang_ta' || buttonId === 'lang_or') {
+        const language = buttonId.replace('lang_', '');
+        const scriptButtons = generateScriptTypeButtons(language);
+        await sendWhatsAppInteractiveMessage(phoneNumber, scriptButtons);
+        return;
+      }
+      
+      // Handle Hindi script selection
+      if (buttonId === 'lang_hi') {
+        const hindiScriptButtons = generateHindiScriptButtons();
+        await sendWhatsAppInteractiveMessage(phoneNumber, hindiScriptButtons);
+        return;
+      }
+      
+      // Handle final language selection
       if (buttonId.startsWith('lang_')) {
         const selectedLanguage = buttonId.replace('lang_', '');
         setUserLanguage(phoneNumber, selectedLanguage);
         
-        const welcomeMessages = {
-          en: 'Great! I\'ll assist you in English. How can I help you with your health today?',
-          hi: 'बहुत अच्छा! मैं आपकी हिंदी में सहायता करूंगा। आज आपके स्वास्थ्य के बारे में मैं कैसे मदद कर सकता हूं?',
-          te: 'చాలా బాగుంది! నేను మీకు తెలుగులో సహాయం చేస్తాను। ఈరోజు మీ ఆరోగ్యం గురించి నేను ఎలా సహాయం చేయగలను?',
-          ta: 'அருமை! நான் உங்களுக்கு தமிழில் உதவுகிறேன். இன்று உங்கள் உடல்நலம் குறித்து நான் எப்படி உதவ முடியும்?',
-          or: 'bahut bhala! mu tumaku odia re sahayata karibo. aja tumara swasthya bisayare mu kemiti sahayata kari paribo?',
-          hi_trans: 'Bahut accha! Main aapki Hindi mein madad karunga. Aaj aapke health ke baare mein main kaise help kar sakta hun?'
-        };
+        let confirmationMessage = '';
+        switch (selectedLanguage) {
+          case 'en':
+            confirmationMessage = '🇬🇧 English selected! How can I help you with your health today?';
+            break;
+          case 'hi':
+            confirmationMessage = '🇮🇳 हिंदी चुनी गई! आज मैं आपकी स्वास्थ्य संबंधी कैसे मदद कर सकता हूं?';
+            break;
+          case 'hi_trans':
+            confirmationMessage = '🇮🇳 Hindi (Roman) chunli gayi! Aaj main aapki health mein kaise madad kar sakta hun?';
+            break;
+          case 'te':
+            confirmationMessage = '🇮🇳 తెలుగు ఎంచుకున్నారు! ఈరోజు మీ ఆరోగ్యం గురించి నేను ఎలా సహాయం చేయగలను?';
+            break;
+          case 'te_trans':
+            confirmationMessage = '🇮🇳 Telugu (Roman) select chesaru! Ee roju mee health lo nenu ela help cheyagalanu?';
+            break;
+          case 'ta':
+            confirmationMessage = '🇮🇳 தமிழ் தேர்ந்தெடுக்கப்பட்டது! இன்று உங்கள் ஆரோக்கியத்தில் நான் எப்படி உதவ முடியும்?';
+            break;
+          case 'ta_trans':
+            confirmationMessage = '🇮🇳 Tamil (Roman) select panneenga! Innaiku unga health la naan eppadi help panna mudiyum?';
+            break;
+          case 'or':
+            confirmationMessage = '🇮🇳 ଓଡ଼ିଆ ବାଛିଲେ! ଆଜି ଆପଣଙ୍କ ସ୍ୱାସ୍ଥ୍ୟରେ ମୁଁ କିପରି ସାହାଯ୍ୟ କରିପାରିବି?';
+            break;
+          case 'or_trans':
+            confirmationMessage = '🇮🇳 Odia (Roman) select kala! Aaji apananka health re mu kemiti sahayya kariparibo?';
+            break;
+          default:
+            confirmationMessage = 'Language selected! How can I help you today?';
+        }
         
-        const welcomeMessage = welcomeMessages[selectedLanguage] || welcomeMessages.en;
-        await sendWhatsAppMessage(phoneNumber, welcomeMessage);
+        await sendWhatsAppMessage(phoneNumber, confirmationMessage);
         return;
       }
     }
