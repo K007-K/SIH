@@ -378,11 +378,11 @@ const getGeminiResponse = async (prompt, imageData = null, language = 'en') => {
   }
 };
 
-// Simple queue to prevent concurrent OpenAI requests
+// Simple queue to prevent concurrent transcription requests
 let audioQueue = [];
 let isProcessingAudio = false;
 
-// Convert audio to text using OpenAI Whisper with enhanced rate limit handling
+// Convert audio to text using AssemblyAI with OpenAI fallback
 const transcribeAudio = async (audioBuffer, mimeType = 'audio/ogg; codecs=opus') => {
   return new Promise((resolve, reject) => {
     audioQueue.push({ audioBuffer, mimeType, resolve, reject });
@@ -397,20 +397,115 @@ const processAudioQueue = async () => {
   const { audioBuffer, mimeType, resolve, reject } = audioQueue.shift();
   
   try {
-    const result = await transcribeAudioInternal(audioBuffer, mimeType);
+    const result = await transcribeAudioWithFallback(audioBuffer, mimeType);
     resolve(result);
   } catch (error) {
     reject(error);
   } finally {
     isProcessingAudio = false;
-    // Process next item after a delay to respect rate limits
-    setTimeout(() => processAudioQueue(), 2000);
+    // Process next item after a delay
+    setTimeout(() => processAudioQueue(), 1000);
   }
 };
 
-const transcribeAudioInternal = async (audioBuffer, mimeType, retryCount = 0) => {
-  const maxRetries = 5;
-  const delays = [5000, 10000, 20000, 40000, 60000]; // 5s, 10s, 20s, 40s, 60s
+// Transcribe audio with AssemblyAI primary and OpenAI fallback
+const transcribeAudioWithFallback = async (audioBuffer, mimeType) => {
+  try {
+    // Try AssemblyAI first
+    console.log('Attempting transcription with AssemblyAI...');
+    return await transcribeWithAssemblyAI(audioBuffer, mimeType);
+  } catch (assemblyError) {
+    console.log('AssemblyAI failed, trying OpenAI Whisper...', assemblyError.message);
+    
+    try {
+      return await transcribeWithOpenAI(audioBuffer, mimeType);
+    } catch (openaiError) {
+      console.error('Both transcription services failed:', {
+        assemblyAI: assemblyError.message,
+        openAI: openaiError.message
+      });
+      throw new Error('Audio transcription temporarily unavailable. Please try sending your message as text.');
+    }
+  }
+};
+
+// AssemblyAI transcription
+const transcribeWithAssemblyAI = async (audioBuffer, mimeType) => {
+  const apiKey = process.env.ASSEMBLYAI_API_KEY;
+  if (!apiKey) {
+    throw new Error('ASSEMBLYAI_API_KEY not configured');
+  }
+
+  try {
+    // Step 1: Upload audio file
+    const uploadResponse = await axios.post('https://api.assemblyai.com/v2/upload', audioBuffer, {
+      headers: {
+        'authorization': apiKey,
+        'content-type': 'application/octet-stream'
+      },
+      timeout: 30000
+    });
+
+    const audioUrl = uploadResponse.data.upload_url;
+    console.log('Audio uploaded to AssemblyAI:', audioUrl);
+
+    // Step 2: Request transcription
+    const transcriptResponse = await axios.post('https://api.assemblyai.com/v2/transcript', {
+      audio_url: audioUrl,
+      language_detection: true,
+      speech_model: 'best'
+    }, {
+      headers: {
+        'authorization': apiKey,
+        'content-type': 'application/json'
+      },
+      timeout: 10000
+    });
+
+    const transcriptId = transcriptResponse.data.id;
+    console.log('Transcription requested, ID:', transcriptId);
+
+    // Step 3: Poll for completion
+    let transcript;
+    let attempts = 0;
+    const maxAttempts = 30; // 30 seconds max wait
+    
+    do {
+      await new Promise(resolve => setTimeout(resolve, 1000)); // Wait 1 second
+      
+      const statusResponse = await axios.get(`https://api.assemblyai.com/v2/transcript/${transcriptId}`, {
+        headers: {
+          'authorization': apiKey
+        },
+        timeout: 10000
+      });
+      
+      transcript = statusResponse.data;
+      attempts++;
+      
+      if (transcript.status === 'error') {
+        throw new Error(`AssemblyAI transcription failed: ${transcript.error}`);
+      }
+      
+    } while (transcript.status !== 'completed' && attempts < maxAttempts);
+
+    if (transcript.status !== 'completed') {
+      throw new Error('AssemblyAI transcription timeout');
+    }
+
+    console.log('AssemblyAI transcription completed:', transcript.text);
+    return transcript.text || '';
+    
+  } catch (error) {
+    console.error('AssemblyAI transcription error:', error.message);
+    throw error;
+  }
+};
+
+// OpenAI Whisper transcription (fallback)
+const transcribeWithOpenAI = async (audioBuffer, mimeType, retryCount = 0) => {
+  const maxRetries = 2; // Reduced retries since it's fallback
+  const delays = [3000, 6000]; // Shorter delays
   
   try {
     const apiKey = process.env.OPENAI_API_KEY;
@@ -431,31 +526,22 @@ const transcribeAudioInternal = async (audioBuffer, mimeType, retryCount = 0) =>
         'Authorization': `Bearer ${apiKey}`,
         ...formData.getHeaders()
       },
-      timeout: 60000
+      timeout: 30000
     });
 
     return response.data.text || '';
   } catch (error) {
-    console.error(`Audio transcription error (attempt ${retryCount + 1}):`, {
+    console.error(`OpenAI transcription error (attempt ${retryCount + 1}):`, {
       message: error.message,
-      status: error.response?.status,
-      retryAfter: error.response?.headers['retry-after']
+      status: error.response?.status
     });
     
-    // Handle rate limiting (429) with progressive delays
+    // Handle rate limiting with reduced retries
     if (error.response?.status === 429 && retryCount < maxRetries) {
-      const retryAfter = error.response.headers['retry-after'];
-      const delay = retryAfter ? parseInt(retryAfter) * 1000 : delays[retryCount];
-      
-      console.log(`Rate limited. Retrying in ${delay}ms... (attempt ${retryCount + 1}/${maxRetries})`);
+      const delay = delays[retryCount] || 6000;
+      console.log(`OpenAI rate limited. Retrying in ${delay}ms...`);
       await new Promise(resolve => setTimeout(resolve, delay));
-      
-      return transcribeAudioInternal(audioBuffer, mimeType, retryCount + 1);
-    }
-    
-    // Handle other errors or max retries reached
-    if (error.response?.status === 429) {
-      throw new Error('Audio transcription temporarily unavailable due to high demand. Please try sending your message as text.');
+      return transcribeWithOpenAI(audioBuffer, mimeType, retryCount + 1);
     }
     
     throw error;
@@ -646,6 +732,5 @@ module.exports = {
   generateLanguageButtons,
   generateRegionalLanguageButtons,
   generateScriptTypeButtons,
-  generateHindiScriptButtons,
-  getSystemPrompt
+  generateHindiScriptButtons
 };

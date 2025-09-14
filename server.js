@@ -1,27 +1,25 @@
 const express = require('express');
 const axios = require('axios');
 const FormData = require('form-data');
-const { 
-  detectLanguage, 
-  getGeminiResponse, 
-  transcribeAudio, 
-  generateLanguageButtons, 
-  generateRegionalLanguageButtons,
-  generateScriptTypeButtons,
-  generateHindiScriptButtons,
-  getSystemPrompt 
-} = require('./utils/aiUtils');
+const { getGeminiResponse, detectLanguage, transcribeAudio, generateLanguageButtons, generateRegionalLanguageButtons, generateScriptTypeButtons, generateHindiScriptButtons } = require('./utils/aiUtils');
+
+// Import new feature modules
+const { generateMainMenuButtons, generateSecondaryMenuButtons, generateSymptomCheckerButtons, generateVaccinationButtons, generateHealthAlertsButtons, generatePreventiveCareButtons, generateFeedbackButtons, generateBackButton } = require('./features/main-menu/mainMenuButtons');
+const { generateSymptomCategoryButtons, generateMoreSymptomCategories, generateEmergencyCheckButtons, processSymptomDescription } = require('./features/disease-symptoms/symptomChecker');
+const { generateVaccinationTrackerButtons, generateAgeGroupButtons, generateMoreAgeGroups, getVaccinationScheduleForAge, getVaccineDetails } = require('./features/vaccination-tracker/vaccinationScheduler');
+const { generateOutbreakAlertsButtons, generateOutbreakLevelButtons, generateSeasonalHealthButtons, getOutbreakInfo, getSeasonalHealthInfo, getCurrentSeasonAlerts } = require('./features/health-alerts/outbreakAlerts');
+const { generateFeedbackButtons: generateDetailedFeedback, processFeedback, generateSatisfactionSurvey } = require('./features/accuracy-measurement/feedbackSystem');
 const { createClient } = require('@supabase/supabase-js');
 const cron = require('node-cron');
 const moment = require('moment');
 
-// Import Disease Symptoms Education feature
-const diseaseRoutes = require('./features/disease-symptoms/routes/diseaseRoutes');
-const WhatsAppDiseaseIntegration = require('./features/disease-symptoms/integration/whatsappIntegration');
+// Import Disease Symptoms Education feature (if routes exist)
+// const diseaseRoutes = require('./features/disease-symptoms/routes/diseaseRoutes');
+// const WhatsAppDiseaseIntegration = require('./features/disease-symptoms/integration/whatsappIntegration');
 
-// Import Vaccination Tracker feature
-const vaccinationRoutes = require('./features/vaccination-tracker/routes/vaccinationRoutes');
-const VaccinationWhatsAppIntegration = require('./features/vaccination-tracker/integration/whatsappIntegration');
+// Import Vaccination Tracker feature (if routes exist)
+// const vaccinationRoutes = require('./features/vaccination-tracker/routes/vaccinationRoutes');
+// const VaccinationWhatsAppIntegration = require('./features/vaccination-tracker/integration/whatsappIntegration');
 
 // Load environment variables
 const dotenv = require('dotenv');
@@ -116,11 +114,11 @@ app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-// Mount Disease Symptoms Education routes
-app.use('/api/diseases', diseaseRoutes);
+// Mount Disease Symptoms Education routes (commented out until routes are created)
+// app.use('/api/diseases', diseaseRoutes);
 
-// Mount Vaccination Tracker routes
-app.use('/api/vaccination', vaccinationRoutes);
+// Mount Vaccination Tracker routes (commented out until routes are created)
+// app.use('/api/vaccination', vaccinationRoutes);
 
 // Configure multer for image uploads
 const upload = multer({
@@ -281,88 +279,157 @@ app.post('/webhook', async (req, res) => {
   }
 });
 
-// Handle interactive messages (button replies)
+// Handle interactive messages (button responses)
 const handleInteractiveMessage = async (message, contact) => {
   try {
-    const phoneNumber = message.from;
-    const interactiveType = message.interactive?.type;
+    const buttonId = message.interactive?.button_reply?.id || message.interactive?.list_reply?.id;
+    const userPhone = message.from;
     
-    if (interactiveType === 'button_reply') {
-      const buttonId = message.interactive.button_reply.id;
+    console.log(`Interactive message from ${contact.profile?.name || 'Unknown'} (${userPhone}): ${buttonId}`);
+    
+    let responseMessage = '';
+    let interactiveResponse = null;
+    
+    // Main menu navigation
+    if (buttonId === 'main_menu' || buttonId === 'menu') {
+      interactiveResponse = generateMainMenuButtons();
       
-      // Handle regional languages button
-      if (buttonId === 'regional_langs') {
-        const regionalButtons = generateRegionalLanguageButtons();
-        await sendWhatsAppInteractiveMessage(phoneNumber, regionalButtons);
-        return;
+    } else if (buttonId === 'more_services') {
+      interactiveResponse = generateSecondaryMenuButtons();
+      
+    // Symptom Checker Flow
+    } else if (buttonId === 'symptom_checker') {
+      interactiveResponse = generateSymptomCheckerButtons();
+      
+    } else if (buttonId === 'symptom_describe') {
+      responseMessage = '📝 Please describe your symptoms in detail. For example: "I have fever, headache, and cough for 2 days"';
+      
+    } else if (buttonId === 'symptom_categories') {
+      interactiveResponse = generateSymptomCategoryButtons();
+      
+    } else if (buttonId === 'emergency_check') {
+      interactiveResponse = generateEmergencyCheckButtons();
+      
+    } else if (buttonId.startsWith('category_')) {
+      const category = buttonId.replace('category_', '');
+      responseMessage = `You selected ${category} symptoms. Please describe your specific symptoms in this category.`;
+      
+    // Vaccination Tracker Flow
+    } else if (buttonId === 'vaccination_tracker') {
+      interactiveResponse = generateVaccinationTrackerButtons();
+      
+    } else if (buttonId === 'vacc_age_schedule') {
+      interactiveResponse = generateAgeGroupButtons();
+      
+    } else if (buttonId.startsWith('age_')) {
+      const ageGroup = buttonId.replace('age_', '');
+      responseMessage = getVaccinationScheduleForAge(ageGroup);
+      interactiveResponse = generateBackButton('vaccination_tracker');
+      
+    } else if (buttonId.startsWith('vaccine_info_')) {
+      const vaccineName = buttonId.replace('vaccine_info_', '').replace(/_/g, ' ');
+      responseMessage = getVaccineDetails(vaccineName);
+      
+    // Health Alerts Flow
+    } else if (buttonId === 'health_alerts') {
+      interactiveResponse = generateHealthAlertsButtons();
+      
+    } else if (buttonId === 'current_outbreaks') {
+      interactiveResponse = generateOutbreakLevelButtons();
+      
+    } else if (buttonId === 'seasonal_health') {
+      interactiveResponse = generateSeasonalHealthButtons();
+      
+    } else if (buttonId.endsWith('_outbreaks')) {
+      const level = buttonId.replace('_outbreaks', '');
+      responseMessage = getOutbreakInfo(level);
+      interactiveResponse = generateBackButton('health_alerts');
+      
+    } else if (buttonId.endsWith('_health')) {
+      const season = buttonId.replace('_health', '');
+      responseMessage = getSeasonalHealthInfo(season);
+      interactiveResponse = generateBackButton('seasonal_health');
+      
+    // Preventive Care Flow
+    } else if (buttonId === 'preventive_care') {
+      interactiveResponse = generatePreventiveCareButtons();
+      
+    } else if (buttonId === 'nutrition_tips') {
+      responseMessage = '🥗 **Nutrition Tips for Better Health:**\n\n• Eat 5 servings of fruits and vegetables daily\n• Choose whole grains over refined grains\n• Include lean proteins (fish, chicken, legumes)\n• Limit processed and sugary foods\n• Stay hydrated with 8-10 glasses of water\n• Eat regular, balanced meals\n• Include calcium-rich foods for bone health';
+      interactiveResponse = generateBackButton('preventive_care');
+      
+    } else if (buttonId === 'exercise_guide') {
+      responseMessage = '🏃 **Exercise Guidelines for Health:**\n\n• Aim for 150 minutes of moderate exercise weekly\n• Include strength training 2-3 times per week\n• Start slowly and gradually increase intensity\n• Choose activities you enjoy (walking, swimming, cycling)\n• Include flexibility and balance exercises\n• Take rest days for recovery\n• Consult doctor before starting new exercise program';
+      interactiveResponse = generateBackButton('preventive_care');
+      
+    } else if (buttonId === 'hygiene_tips') {
+      responseMessage = '🧼 **Essential Hygiene Practices:**\n\n• Wash hands frequently with soap for 20 seconds\n• Cover coughs and sneezes with elbow\n• Brush teeth twice daily and floss\n• Shower regularly and keep body clean\n• Maintain clean living environment\n• Wash fruits and vegetables before eating\n• Use clean water for drinking and cooking\n• Keep fingernails short and clean';
+      interactiveResponse = generateBackButton('preventive_care');
+      
+    // Feedback Flow
+    } else if (buttonId === 'feedback') {
+      interactiveResponse = generateFeedbackButtons();
+      
+    } else if (buttonId.startsWith('feedback_')) {
+      const rating = buttonId.includes('excellent') ? 5 : buttonId.includes('good') ? 4 : 3;
+      const feedbackResult = await processFeedback('general', rating, userPhone, message.id);
+      responseMessage = feedbackResult.message;
+      interactiveResponse = generateBackButton('main_menu');
+      
+    // Language selection (existing code)
+    } else if (buttonId === 'lang_en') {
+      await updateUserLanguage(userPhone, 'en');
+      responseMessage = 'Great! I\'ll assist you in English. How can I help you with your health concerns today?';
+      interactiveResponse = generateMainMenuButtons();
+      
+    } else if (buttonId === 'lang_regional') {
+      interactiveResponse = generateRegionalLanguageButtons();
+      
+    } else if (buttonId.startsWith('lang_')) {
+      const language = buttonId.replace('lang_', '');
+      if (['te', 'ta', 'hi', 'or'].includes(language)) {
+        interactiveResponse = generateScriptTypeButtons(language);
       }
       
-      // Handle back to languages button
-      if (buttonId === 'back_to_languages') {
-        const languageButtons = generateLanguageButtons();
-        await sendWhatsAppInteractiveMessage(phoneNumber, languageButtons);
-        return;
-      }
+    } else if (buttonId.startsWith('script_')) {
+      const parts = buttonId.split('_');
+      const language = parts[1];
+      const script = parts[2];
       
-      // Handle script selection for regional languages
-      if (buttonId === 'lang_te' || buttonId === 'lang_ta' || buttonId === 'lang_or') {
-        const language = buttonId.replace('lang_', '');
-        const scriptButtons = generateScriptTypeButtons(language);
-        await sendWhatsAppInteractiveMessage(phoneNumber, scriptButtons);
-        return;
-      }
+      const finalLanguage = script === 'native' ? language : `${language}_roman`;
+      await updateUserLanguage(userPhone, finalLanguage);
       
-      // Handle Hindi script selection
-      if (buttonId === 'lang_hi') {
-        const hindiScriptButtons = generateHindiScriptButtons();
-        await sendWhatsAppInteractiveMessage(phoneNumber, hindiScriptButtons);
-        return;
-      }
+      const languageNames = {
+        te: script === 'native' ? 'తెలుగు' : 'Telugu (Roman)',
+        ta: script === 'native' ? 'தமிழ்' : 'Tamil (Roman)',
+        hi: script === 'native' ? 'हिंदी' : 'Hindi (Roman)',
+        or: script === 'native' ? 'ଓଡ଼ିଆ' : 'Odia (Roman)'
+      };
       
-      // Handle final language selection
-      if (buttonId.startsWith('lang_')) {
-        const selectedLanguage = buttonId.replace('lang_', '');
-        setUserLanguage(phoneNumber, selectedLanguage);
-        
-        let confirmationMessage = '';
-        switch (selectedLanguage) {
-          case 'en':
-            confirmationMessage = '🇬🇧 English selected! How can I help you with your health today?';
-            break;
-          case 'hi':
-            confirmationMessage = '🇮🇳 हिंदी चुनी गई! आज मैं आपकी स्वास्थ्य संबंधी कैसे मदद कर सकता हूं?';
-            break;
-          case 'hi_trans':
-            confirmationMessage = '🇮🇳 Hindi (Roman) chunli gayi! Aaj main aapki health mein kaise madad kar sakta hun?';
-            break;
-          case 'te':
-            confirmationMessage = '🇮🇳 తెలుగు ఎంచుకున్నారు! ఈరోజు మీ ఆరోగ్యం గురించి నేను ఎలా సహాయం చేయగలను?';
-            break;
-          case 'te_trans':
-            confirmationMessage = '🇮🇳 Telugu (Roman) select chesaru! Ee roju mee health lo nenu ela help cheyagalanu?';
-            break;
-          case 'ta':
-            confirmationMessage = '🇮🇳 தமிழ் தேர்ந்தெடுக்கப்பட்டது! இன்று உங்கள் ஆரோக்கியத்தில் நான் எப்படி உதவ முடியும்?';
-            break;
-          case 'ta_trans':
-            confirmationMessage = '🇮🇳 Tamil (Roman) select panneenga! Innaiku unga health la naan eppadi help panna mudiyum?';
-            break;
-          case 'or':
-            confirmationMessage = '🇮🇳 ଓଡ଼ିଆ ବାଛିଲେ! ଆଜି ଆପଣଙ୍କ ସ୍ୱାସ୍ଥ୍ୟରେ ମୁଁ କିପରି ସାହାଯ୍ୟ କରିପାରିବି?';
-            break;
-          case 'or_trans':
-            confirmationMessage = '🇮🇳 Odia (Roman) select kala! Aaji apananka health re mu kemiti sahayya kariparibo?';
-            break;
-          default:
-            confirmationMessage = 'Language selected! How can I help you today?';
-        }
-        
-        await sendWhatsAppMessage(phoneNumber, confirmationMessage);
-        return;
-      }
+      responseMessage = `Perfect! I'll assist you in ${languageNames[language]}. How can I help you with your health concerns today?`;
+      interactiveResponse = generateMainMenuButtons();
+      
+    } else if (buttonId === 'back_to_languages') {
+      interactiveResponse = generateLanguageButtons();
+      
+    } else {
+      responseMessage = 'I didn\'t understand that selection. Please try again or type your question.';
+      interactiveResponse = generateMainMenuButtons();
     }
+    
+    // Send response
+    if (interactiveResponse) {
+      await sendWhatsAppInteractiveMessage(userPhone, interactiveResponse);
+    } else if (responseMessage) {
+      await sendWhatsAppMessage(userPhone, responseMessage);
+    }
+    
   } catch (error) {
     console.error('Error handling interactive message:', error);
+    await sendWhatsAppMessage(
+      message.from,
+      'Sorry, I encountered an error processing your selection. Please try again.'
+    );
   }
 };
 
@@ -374,10 +441,33 @@ const handleIncomingMessage = async (message, contact) => {
     
     // Check for language change shortcut
     const messageText = message.text?.body?.toLowerCase() || '';
-    if (messageText === 'ch-lang' || messageText === 'change language') {
+    if (messageText === 'ch-lang' || messageText.toLowerCase().includes('change language')) {
       const languageButtons = generateLanguageButtons();
       await sendWhatsAppInteractiveMessage(phoneNumber, languageButtons);
       return;
+    }
+    
+    // Check for menu command
+    if (messageText.toLowerCase().includes('menu') || messageText.toLowerCase().includes('help') || messageText === '/' || messageText === 'start') {
+      const menuButtons = generateMainMenuButtons();
+      await sendWhatsAppInteractiveMessage(phoneNumber, menuButtons);
+      return;
+    }
+    
+    // Check if user is describing symptoms
+    if (messageText.toLowerCase().includes('symptom') || messageText.toLowerCase().includes('pain') || messageText.toLowerCase().includes('fever') || messageText.toLowerCase().includes('headache')) {
+      const userLanguage = await getUserLanguage(phoneNumber);
+      const symptomAnalysis = await processSymptomDescription(messageText, userLanguage);
+      
+      if (symptomAnalysis.type === 'emergency') {
+        await sendWhatsAppMessage(phoneNumber, symptomAnalysis.message);
+        await sendWhatsAppInteractiveMessage(phoneNumber, symptomAnalysis.buttons);
+        return;
+      } else if (symptomAnalysis.type === 'analysis') {
+        await sendWhatsAppMessage(phoneNumber, symptomAnalysis.message);
+        await sendWhatsAppInteractiveMessage(phoneNumber, symptomAnalysis.buttons);
+        return;
+      }
     }
     
     // Check if user is new and needs language selection
