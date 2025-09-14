@@ -405,19 +405,24 @@ const handleInteractiveMessage = async (message, contact) => {
       
     // Chat with AI Flow
     } else if (buttonId === 'chat_with_ai') {
+      console.log('🤖 Chat with AI button clicked');
       const userLanguage = getUserLanguage(userPhone);
+      console.log(`User language: ${userLanguage}`);
+      
       const chatPrompts = {
-        en: 'Hi! I\'m your AI healthcare assistant. You can ask me anything about health, symptoms, treatments, or general medical questions. What would you like to know?',
-        hi: 'नमस्ते! मैं आपका AI स्वास्थ्य सहायक हूं। आप मुझसे स्वास्थ्य, लक्षण, उपचार या सामान्य चिकित्सा प्रश्नों के बारे में कुछ भी पूछ सकते हैं। आप क्या जानना चाहते हैं?',
-        hi_roman: 'Namaste! Main aapka AI swasthya sahayak hun. Aap mujhse swasthya, lakshan, upchar ya samanya chikitsa prashno ke bare mein kuch bhi puch sakte hain. Aap kya janna chahte hain?',
-        te: 'హలో! నేను మీ AI ఆరోగ్య సహాయకుడిని. మీరు నన్ను ఆరోగ్యం, లక్షణాలు, చికిత్సలు లేదా సాధారణ వైద్య ప్రశ్నల గురించి ఏదైనా అడగవచ్చు. మీరు ఏమి తెలుసుకోవాలనుకుంటున్నారు?',
-        te_roman: 'Hello! Nenu mee AI arogya sahayakudini. Meeru nannu arogyam, lakshanalu, chikitsalu leda sadhaarana vaidya prashnala gurinchi edaina adagavachu. Meeru emi telusukovalanukuntunnaru?',
-        ta: 'வணக்கம்! நான் உங்கள் AI சுகாதார உதவியாளர். நீங்கள் என்னிடம் சுகாதாரம், அறிகுறிகள், சிகிச்சைகள் அல்லது பொதுவான மருத்துவ கேள்விகள் பற்றி எதையும் கேட்கலாம். நீங்கள் என்ன தெரிந்து கொள்ள விரும்புகிறீர்கள்?',
-        ta_roman: 'Vanakkam! Naan unga AI sugathara uthaviyalar. Neenga enniddam sugatharam, arikurikal, sigaichaikal alladu poduvana maruthuva kelvikal pattri edhaiyum ketkalaam. Neenga enna therindhu kolla virumbugireergal?',
-        or: 'ନମସ୍କାର! ମୁଁ ଆପଣଙ୍କର AI ସ୍ୱାସ୍ଥ୍ୟ ସହାୟକ। ଆପଣ ମୋତେ ସ୍ୱାସ୍ଥ୍ୟ, ଲକ୍ଷଣ, ଚିକିତ୍ସା କିମ୍ବା ସାଧାରଣ ଚିକିତ୍ସା ପ୍ରଶ୍ନ ବିଷୟରେ କିଛି ପଚାରିପାରିବେ। ଆପଣ କଣ ଜାଣିବାକୁ ଚାହାଁନ୍ତି?',
-        or_roman: 'Namaskar! Mun apankara AI swasthya sahayaka. Apana mote swasthya, lakshana, chikitsa kimba sadhaarana chikitsa prashna bishayare kichu pacharipaaribe. Apana kana jaanibaku chahaanti?'
+        en: '🤖 Hi! I\'m your AI healthcare assistant. Ask me anything about health, symptoms, treatments, or medical questions. What would you like to know?',
+        hi: '🤖 नमस्ते! मैं आपका AI स्वास्थ्य सहायक हूं। स्वास्थ्य, लक्षण, उपचार के बारे में कुछ भी पूछें। आप क्या जानना चाहते हैं?',
+        hi_roman: '🤖 Namaste! Main aapka AI swasthya sahayak hun. Swasthya, lakshan, upchar ke bare mein kuch bhi puchiye. Aap kya janna chahte hain?',
+        te: '🤖 హలో! నేను మీ AI ఆరోగ్య సహాయకుడిని. ఆరోగ్యం, లక్షణాలు, చికిత్సల గురించి అడగండి. మీరు ఏమి తెలుసుకోవాలి?',
+        te_roman: '🤖 Hello! Nenu mee AI arogya sahayakudini. Arogyam, lakshanalu, chikitsala gurinchi adagandi. Meeru emi telusukovali?',
+        ta: '🤖 வணக்கம்! நான் உங்கள் AI சுகாதார உதவியாளர். சுகாதாரம், அறிகுறிகள், சிகிச்சை பற்றி கேளுங்கள். என்ன தெரிந்துகொள்ள விரும்புகிறீர்கள்?',
+        ta_roman: '🤖 Vanakkam! Naan unga AI sugathara uthaviyalar. Sugatharam, arikurikal, sigaichai pattri kelunga. Enna therinjukolla virumbugireergal?',
+        or: '🤖 ନମସ୍କାର! ମୁଁ ଆପଣଙ୍କର AI ସ୍ୱାସ୍ଥ୍ୟ ସହାୟକ। ସ୍ୱାସ୍ଥ୍ୟ, ଲକ୍ଷଣ, ଚିକିତ୍ସା ବିଷୟରେ ପଚାରନ୍ତୁ। ଆପଣ କଣ ଜାଣିବାକୁ ଚାହାଁନ୍ତି?',
+        or_roman: '🤖 Namaskar! Mun apankara AI swasthya sahayaka. Swasthya, lakshana, chikitsa bishayare pacharantu. Apana kana jaanibaku chahaanti?'
       };
+      
       responseMessage = chatPrompts[userLanguage] || chatPrompts.en;
+      console.log(`Chat with AI response: ${responseMessage}`);
       
     // Symptom Checker Flow
     } else if (buttonId === 'symptom_checker') {
