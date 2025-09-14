@@ -243,20 +243,67 @@ const handleInteractiveMessage = async (message, contact) => {
     
     console.log(`Interactive message from ${contactName} (${userPhone}): ${buttonId}`);
     
-    // Handle language selection only
+    // Handle language selection and regional language flow
+    if (buttonId === 'regional_langs') {
+      // Show regional language options
+      const { generateRegionalLanguageButtons } = require('./utils/aiUtils');
+      const regionalButtons = generateRegionalLanguageButtons();
+      await sendWhatsAppInteractiveMessage(userPhone, regionalButtons);
+      return;
+    }
+    
     if (buttonId && buttonId.startsWith('lang_')) {
       const selectedLanguage = buttonId.replace('lang_', '');
+      
+      // For regional languages, show script type selection
+      if (['te', 'ta', 'or'].includes(selectedLanguage)) {
+        const { generateScriptTypeButtons } = require('./utils/aiUtils');
+        const scriptButtons = generateScriptTypeButtons(selectedLanguage);
+        await sendWhatsAppInteractiveMessage(userPhone, scriptButtons);
+        return;
+      }
+      
+      // For Hindi, show script options
+      if (selectedLanguage === 'hi') {
+        const { generateScriptTypeButtons } = require('./utils/aiUtils');
+        const scriptButtons = generateScriptTypeButtons('hi');
+        await sendWhatsAppInteractiveMessage(userPhone, scriptButtons);
+        return;
+      }
+      
+      // For English, set language directly
       await updateUserLanguage(userPhone, selectedLanguage);
       
       const welcomeMessages = {
-        en: '🤖 Great! I\'ll assist you in English. Ask me any health questions!',
-        hi: '🤖 बहुत बढ़िया! मैं हिंदी में आपकी सहायता करूंगा। कोई भी स्वास्थ्य प्रश्न पूछें!',
-        te: '🤖 అద్భుతం! నేను తెలుగులో మీకు సహాయం చేస్తాను। ఏదైనా ఆరోగ్య ప్రశ్న అడగండి!',
-        ta: '🤖 அருமை! நான் தமிழில் உங்களுக்கு உதவுவேன். எந்த சுகாதார கேள்வியும் கேளுங்கள்!',
-        or: '🤖 ବହୁତ ଭଲ! ମୁଁ ଓଡ଼ିଆରେ ଆପଣଙ୍କୁ ସାହାଯ୍ୟ କରିବି। କୌଣସି ସ୍ୱାସ୍ଥ୍ୟ ପ୍ରଶ୍ନ ପଚାରନ୍ତୁ!'
+        en: '🤖 Great! I\'ll assist you in English. Ask me any health questions!'
       };
       
       const responseMessage = welcomeMessages[selectedLanguage] || welcomeMessages.en;
+      await sendWhatsAppMessage(userPhone, responseMessage);
+      return;
+    }
+    
+    // Handle script type selection
+    if (buttonId && buttonId.startsWith('script_')) {
+      const parts = buttonId.split('_');
+      const language = parts[1];
+      const script = parts[2];
+      
+      const finalLanguage = script === 'native' ? language : `${language}_roman`;
+      await updateUserLanguage(userPhone, finalLanguage);
+      
+      const welcomeMessages = {
+        hi: '🤖 बहुत बढ़िया! मैं हिंदी में आपकी सहायता करूंगा। कोई भी स्वास्थ्य प्रश्न पूछें!',
+        hi_roman: '🤖 Bahut badhiya! Main Hindi mein aapki sahayata karunga. Koi bhi swasthya prashn puchhen!',
+        te: '🤖 అద్భుతం! నేను తెలుగులో మీకు సహాయం చేస్తాను। ఏదైనా ఆరోగ్య ప్రశ్న అడగండి!',
+        te_roman: '🤖 Adbhutam! Nenu Telugu lo meeku sahayam chestanu. Edaina aarogya prasna adagandi!',
+        ta: '🤖 அருமை! நான் தமிழில் உங்களுக்கு உதவுவேன். எந்த சுகாதார கேள்வியும் கேளுங்கள்!',
+        ta_roman: '🤖 Arumai! Naan Tamil la ungalukku uthavuven. Entha sugathara kelviyu kelungal!',
+        or: '🤖 ବହୁତ ଭଲ! ମୁଁ ଓଡ଼ିଆରେ ଆପଣଙ୍କୁ ସାହାଯ୍ୟ କରିବି। କୌଣସି ସ୍ୱାସ୍ଥ୍ୟ ପ୍ରଶ୍ନ ପଚାରନ୍ତୁ!',
+        or_roman: '🤖 Bahut bhala! Mu Odia re apananka sahayya karibo. Kounasi swasthya prasna pacharantu!'
+      };
+      
+      const responseMessage = welcomeMessages[finalLanguage] || welcomeMessages.en || '🤖 Great! Ask me any health questions!';
       await sendWhatsAppMessage(userPhone, responseMessage);
       return;
     }
