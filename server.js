@@ -128,56 +128,98 @@ const upload = multer({
   },
 });
 
-// WhatsApp API configuration
-const WHATSAPP_API_URL = `https://graph.facebook.com/v17.0/${process.env.WHATSAPP_PHONE_NUMBER_ID}/messages`;
+// WhatsApp API configuration - Updated to latest version with better error handling
+const WHATSAPP_API_VERSION = 'v20.0';
+const WHATSAPP_API_URL = `https://graph.facebook.com/${WHATSAPP_API_VERSION}/${process.env.WHATSAPP_PHONE_NUMBER_ID}/messages`;
 const WHATSAPP_ACCESS_TOKEN = process.env.WHATSAPP_ACCESS_TOKEN;
 
-// Utility functions
-const sendWhatsAppMessage = async (to, message) => {
-  try {
-    const response = await axios.post(
-      WHATSAPP_API_URL,
-      {
-        messaging_product: 'whatsapp',
-        to: to,
-        type: 'text',
-        text: { body: message }
-      },
-      {
-        headers: {
-          'Authorization': `Bearer ${WHATSAPP_ACCESS_TOKEN}`,
-          'Content-Type': 'application/json'
+// Enhanced WhatsApp messaging with retry logic and better error handling
+const sendWhatsAppMessage = async (to, message, retries = 2) => {
+  for (let attempt = 1; attempt <= retries; attempt++) {
+    try {
+      const response = await axios.post(
+        WHATSAPP_API_URL,
+        {
+          messaging_product: 'whatsapp',
+          to: to,
+          type: 'text',
+          text: { body: message },
+        },
+        {
+          headers: {
+            Authorization: `Bearer ${WHATSAPP_ACCESS_TOKEN}`,
+            'Content-Type': 'application/json',
+          },
+          timeout: 10000
+        }
+      );
+      console.log('✅ WhatsApp message sent successfully');
+      return response.data;
+    } catch (error) {
+      console.error(`❌ Attempt ${attempt} failed:`, error.response?.data?.error || error.message);
+      
+      // Handle specific error codes
+      if (error.response?.data?.error?.code === 10) {
+        console.log('🔧 OAuth/Permission error detected - check access token and permissions');
+        // Log for manual review instead of throwing immediately
+        if (attempt === retries) {
+          console.log('📋 Message logged for manual review:', { to, message, timestamp: new Date().toISOString() });
+          return { error: 'Permission denied - message logged for review' };
         }
       }
-    );
-    return response.data;
-  } catch (error) {
-    console.error('Error sending WhatsApp message:', error.response?.data || error.message);
-    throw error;
+      
+      if (attempt === retries) {
+        throw error;
+      }
+      
+      // Wait before retry
+      await new Promise(resolve => setTimeout(resolve, 1000 * attempt));
+    }
   }
 };
 
 // Send interactive message with buttons
-const sendWhatsAppInteractiveMessage = async (to, interactiveMessage) => {
-  try {
-    const response = await axios.post(
-      WHATSAPP_API_URL,
-      {
-        messaging_product: 'whatsapp',
-        to: to,
-        ...interactiveMessage
-      },
-      {
-        headers: {
-          'Authorization': `Bearer ${WHATSAPP_ACCESS_TOKEN}`,
-          'Content-Type': 'application/json'
+const sendWhatsAppInteractiveMessage = async (to, interactiveMessage, retries = 2) => {
+  for (let attempt = 1; attempt <= retries; attempt++) {
+    try {
+      const response = await axios.post(
+        WHATSAPP_API_URL,
+        {
+          messaging_product: 'whatsapp',
+          to: to,
+          ...interactiveMessage,
+        },
+        {
+          headers: {
+            Authorization: `Bearer ${WHATSAPP_ACCESS_TOKEN}`,
+            'Content-Type': 'application/json',
+          },
+          timeout: 10000
         }
+      );
+      console.log('✅ WhatsApp interactive message sent successfully');
+      return response.data;
+    } catch (error) {
+      console.error(`❌ Interactive message attempt ${attempt} failed:`, error.response?.data?.error || error.message);
+      
+      // Handle permission errors gracefully
+      if (error.response?.data?.error?.code === 10) {
+        console.log('🔧 Falling back to simple text message due to permission issues');
+        // Extract text from interactive message and send as simple text
+        const fallbackText = interactiveMessage.interactive?.body?.text || 
+                           interactiveMessage.interactive?.header?.text || 
+                           'Healthcare menu options available. Please type "menu" to see options.';
+        return await sendWhatsAppMessage(to, fallbackText);
       }
-    );
-    return response.data;
-  } catch (error) {
-    console.error('Error sending WhatsApp interactive message:', error.response?.data || error.message);
-    throw error;
+      
+      if (attempt === retries) {
+        // Final fallback to simple message
+        console.log('📋 Falling back to simple text message');
+        return await sendWhatsAppMessage(to, 'Healthcare assistant ready. Type "help" for options.');
+      }
+      
+      await new Promise(resolve => setTimeout(resolve, 1000 * attempt));
+    }
   }
 };
 
