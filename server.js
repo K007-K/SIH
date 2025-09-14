@@ -475,7 +475,7 @@ const handleIncomingMessage = async (message, contact) => {
         // Convert base64 to buffer for Whisper API
         const audioBuffer = Buffer.from(audioData.data, 'base64');
         
-        // Transcribe audio using OpenAI Whisper (supports Opus)
+        // Transcribe audio using OpenAI Whisper with queue and retry logic
         const transcription = await transcribeAudio(audioBuffer, audioData.mimeType);
         console.log(`Audio transcribed: "${transcription}"`);
         
@@ -505,11 +505,13 @@ Please provide healthcare guidance based on this voice message.`;
           mimeType: message.audio?.mime_type
         });
         
-        // Provide specific error messages
+        // Provide specific error messages based on error type
         if (error.message.includes('OPENAI_API_KEY')) {
-          aiResponse = 'Voice message processing is temporarily unavailable. Please send your question as text.';
-        } else if (error.message.includes('Failed to download')) {
-          aiResponse = 'I had trouble accessing your voice message. Please try sending it again.';
+          aiResponse = 'Audio transcription is temporarily unavailable. Please send your message as text.';
+        } else if (error.message.includes('temporarily unavailable')) {
+          aiResponse = error.message; // Use the specific rate limit message
+        } else if (error.message.includes('rate limit')) {
+          aiResponse = 'Audio processing is temporarily busy due to high demand. Please try again in a moment or send your message as text.';
         } else {
           aiResponse = 'Sorry, I had trouble processing your voice message. Please try sending it as text.';
         }

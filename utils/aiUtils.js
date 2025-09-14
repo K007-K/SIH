@@ -378,10 +378,39 @@ const getGeminiResponse = async (prompt, imageData = null, language = 'en') => {
   }
 };
 
-// Convert audio to text using OpenAI Whisper with retry logic for rate limits
-const transcribeAudio = async (audioBuffer, mimeType = 'audio/ogg; codecs=opus', retryCount = 0) => {
-  const maxRetries = 3;
-  const baseDelay = 1000; // 1 second
+// Simple queue to prevent concurrent OpenAI requests
+let audioQueue = [];
+let isProcessingAudio = false;
+
+// Convert audio to text using OpenAI Whisper with enhanced rate limit handling
+const transcribeAudio = async (audioBuffer, mimeType = 'audio/ogg; codecs=opus') => {
+  return new Promise((resolve, reject) => {
+    audioQueue.push({ audioBuffer, mimeType, resolve, reject });
+    processAudioQueue();
+  });
+};
+
+const processAudioQueue = async () => {
+  if (isProcessingAudio || audioQueue.length === 0) return;
+  
+  isProcessingAudio = true;
+  const { audioBuffer, mimeType, resolve, reject } = audioQueue.shift();
+  
+  try {
+    const result = await transcribeAudioInternal(audioBuffer, mimeType);
+    resolve(result);
+  } catch (error) {
+    reject(error);
+  } finally {
+    isProcessingAudio = false;
+    // Process next item after a delay to respect rate limits
+    setTimeout(() => processAudioQueue(), 2000);
+  }
+};
+
+const transcribeAudioInternal = async (audioBuffer, mimeType, retryCount = 0) => {
+  const maxRetries = 5;
+  const delays = [5000, 10000, 20000, 40000, 60000]; // 5s, 10s, 20s, 40s, 60s
   
   try {
     const apiKey = process.env.OPENAI_API_KEY;
@@ -395,14 +424,14 @@ const transcribeAudio = async (audioBuffer, mimeType = 'audio/ogg; codecs=opus',
       contentType: mimeType
     });
     formData.append('model', 'whisper-1');
-    formData.append('language', 'auto'); // Auto-detect language
+    formData.append('language', 'auto');
 
     const response = await axios.post('https://api.openai.com/v1/audio/transcriptions', formData, {
       headers: {
         'Authorization': `Bearer ${apiKey}`,
         ...formData.getHeaders()
       },
-      timeout: 45000 // Increased timeout
+      timeout: 60000
     });
 
     return response.data.text || '';
@@ -413,20 +442,20 @@ const transcribeAudio = async (audioBuffer, mimeType = 'audio/ogg; codecs=opus',
       retryAfter: error.response?.headers['retry-after']
     });
     
-    // Handle rate limiting (429) with exponential backoff
+    // Handle rate limiting (429) with progressive delays
     if (error.response?.status === 429 && retryCount < maxRetries) {
       const retryAfter = error.response.headers['retry-after'];
-      const delay = retryAfter ? parseInt(retryAfter) * 1000 : baseDelay * Math.pow(2, retryCount);
+      const delay = retryAfter ? parseInt(retryAfter) * 1000 : delays[retryCount];
       
-      console.log(`Rate limited. Retrying in ${delay}ms...`);
+      console.log(`Rate limited. Retrying in ${delay}ms... (attempt ${retryCount + 1}/${maxRetries})`);
       await new Promise(resolve => setTimeout(resolve, delay));
       
-      return transcribeAudio(audioBuffer, mimeType, retryCount + 1);
+      return transcribeAudioInternal(audioBuffer, mimeType, retryCount + 1);
     }
     
     // Handle other errors or max retries reached
     if (error.response?.status === 429) {
-      throw new Error('OpenAI API rate limit exceeded. Please try again later.');
+      throw new Error('Audio transcription temporarily unavailable due to high demand. Please try sending your message as text.');
     }
     
     throw error;
@@ -544,14 +573,14 @@ const generateScriptTypeButtons = (language) => {
           {
             type: 'reply',
             reply: {
-              id: `lang_${language}`,
-              title: `📝 ${langInfo.native} Script`
+              id: `script_${language}_native`,
+              title: `📝 ${langInfo.native}`
             }
           },
           {
             type: 'reply',
             reply: {
-              id: `lang_${language}_trans`,
+              id: `script_${language}_roman`,
               title: '🔤 Roman Letters'
             }
           },
@@ -611,8 +640,8 @@ const generateHindiScriptButtons = () => {
 };
 
 module.exports = {
-  detectLanguage,
   getGeminiResponse,
+  detectLanguage,
   transcribeAudio,
   generateLanguageButtons,
   generateRegionalLanguageButtons,
