@@ -18,7 +18,10 @@ class VaccinationSafetyGuards {
         standardHeaders: true,
         legacyHeaders: false,
         keyGenerator: (req) => {
-            return req.ip || req.connection.remoteAddress || 'unknown';
+            // Use the built-in IP key generator to handle IPv6 properly
+            const forwarded = req.headers['x-forwarded-for'];
+            const ip = forwarded ? forwarded.split(',')[0] : req.connection.remoteAddress;
+            return ip || 'unknown';
         }
     });
 
