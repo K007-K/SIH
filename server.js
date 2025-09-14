@@ -151,34 +151,34 @@ const sendWhatsAppMessage = async (to, message, retries = 2) => {
   for (let attempt = 1; attempt <= retries; attempt++) {
     try {
       const response = await axios.post(
-        WHATSAPP_API_URL,
+        `https://graph.facebook.com/v20.0/${process.env.WHATSAPP_PHONE_NUMBER_ID}/messages`,
         {
           messaging_product: 'whatsapp',
           to: to,
           type: 'text',
-          text: { body: message },
+          text: { body: message }
         },
         {
           headers: {
-            Authorization: `Bearer ${WHATSAPP_ACCESS_TOKEN}`,
-            'Content-Type': 'application/json',
-          },
-          timeout: 10000
+            'Authorization': `Bearer ${process.env.WHATSAPP_ACCESS_TOKEN}`,
+            'Content-Type': 'application/json'
+          }
         }
       );
-      console.log('✅ WhatsApp message sent successfully');
+      
+      console.log(`✅ Message sent successfully to ${to} (attempt ${attempt})`);
       return response.data;
+      
     } catch (error) {
+      const errorMessage = error.response?.data?.error?.message || error.message;
       console.error(`❌ Attempt ${attempt} failed:`, error.response?.data?.error || error.message);
       
-      // Handle specific error codes
-      if (error.response?.data?.error?.code === 10) {
-        console.log('🔧 OAuth/Permission error detected - check access token and permissions');
-        // Log for manual review instead of throwing immediately
-        if (attempt === retries) {
-          console.log('📋 Message logged for manual review:', { to, message, timestamp: new Date().toISOString() });
-          return { error: 'Permission denied - message logged for review' };
-        }
+      // Check for recipient not in allowed list error
+      if (errorMessage.includes('Recipient phone number not in allowed list')) {
+        console.log('⚠️ WhatsApp API Development Mode Restriction:');
+        console.log('📱 This phone number needs to be added to your WhatsApp Business account allowed list');
+        console.log('🔧 Go to Meta Business Manager > WhatsApp > Phone Numbers > Manage');
+        throw new Error('Recipient phone number not in allowed list');
       }
       
       if (attempt === retries) {
@@ -819,9 +819,22 @@ Provide a SHORT response (2-3 sentences max) with:
     
     // Send error message to user
     try {
+      // Check if it's a WhatsApp API error (recipient not allowed)
+      if (error.message && error.message.includes('Recipient phone number not in allowed list')) {
+        console.log('⚠️ WhatsApp API restriction: Recipient not in allowed list');
+        console.log('💡 In development mode, only verified phone numbers can receive messages');
+        console.log('📱 Add the recipient to your WhatsApp Business account allowed list');
+        return; // Don't send error message as it will also fail
+      }
+      
       await sendWhatsAppMessage(message.from, 'Sorry, I encountered an error. Please try again.');
     } catch (sendError) {
       console.error('Error sending error message:', sendError);
+      
+      // If sending error message also fails due to recipient restrictions
+      if (sendError.response?.data?.error?.message?.includes('Recipient phone number not in allowed list')) {
+        console.log('⚠️ Cannot send error message - recipient not in WhatsApp allowed list');
+      }
     }
   }
 };
