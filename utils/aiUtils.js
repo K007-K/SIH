@@ -322,11 +322,11 @@ const getGeminiResponse = async (prompt, imageData = null, language = 'en', retr
         throw new Error('GEMINI_API_KEY not configured');
       }
 
-      // Use Gemini 1.5 Flash instead of 2.0 for better rate limits
-      const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
+      // Use Gemini 2.0 Flash for better response quality
+      const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-exp:generateContent?key=${apiKey}`;
       
-      // Simplified system prompt to reduce token usage
-      const systemPrompt = `You are a helpful healthcare assistant. Provide brief, accurate medical guidance in ${language === 'en' ? 'English' : language}. Always recommend consulting a doctor for serious concerns.`;
+      // Enhanced system prompt for better healthcare responses
+      const systemPrompt = getSystemPrompt(language) || `You are an expert healthcare assistant with comprehensive medical knowledge. Provide accurate, helpful medical guidance in ${language === 'en' ? 'English' : language}. Always recommend consulting a doctor for serious concerns.`;
       const fullPrompt = `${systemPrompt}\n\nUser: ${prompt}`;
 
       let requestBody;
@@ -346,8 +346,8 @@ const getGeminiResponse = async (prompt, imageData = null, language = 'en', retr
             ]
           }],
           generationConfig: {
-            temperature: 0.3,
-            maxOutputTokens: 1024
+            temperature: 0.4,
+            maxOutputTokens: 2048
           }
         };
       } else {
@@ -357,8 +357,8 @@ const getGeminiResponse = async (prompt, imageData = null, language = 'en', retr
             parts: [{ text: fullPrompt }]
           }],
           generationConfig: {
-            temperature: 0.3,
-            maxOutputTokens: 1024
+            temperature: 0.4,
+            maxOutputTokens: 2048
           }
         };
       }
