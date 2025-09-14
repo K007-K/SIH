@@ -1,17 +1,85 @@
 // Main menu system with WhatsApp interactive buttons for healthcare features
 
 // Generate main healthcare menu buttons
-const generateMainMenuButtons = () => {
+const generateMainMenuButtons = (userLanguage = 'en') => {
+  const translations = {
+    en: {
+      header: '🏥 Healthcare Assistant Menu',
+      body: 'Welcome to your comprehensive healthcare assistant! Choose a service:',
+      symptoms: '🔍 Symptoms',
+      vaccines: '💉 Vaccines',
+      alerts: '🚨 Alerts'
+    },
+    hi: {
+      header: '🏥 स्वास्थ्य सहायक मेनू',
+      body: 'आपके व्यापक स्वास्थ्य सहायक में आपका स्वागत है! एक सेवा चुनें:',
+      symptoms: '🔍 लक्षण',
+      vaccines: '💉 टीके',
+      alerts: '🚨 अलर्ट'
+    },
+    hi_roman: {
+      header: '🏥 Swasthya Sahayak Menu',
+      body: 'Aapke vyapak swasthya sahayak mein aapka swagat hai! Ek seva chuniye:',
+      symptoms: '🔍 Lakshan',
+      vaccines: '💉 Teeke',
+      alerts: '🚨 Alert'
+    },
+    te: {
+      header: '🏥 ఆరోగ్య సహాయక మెనూ',
+      body: 'మీ సమగ్ర ఆరోగ్య సహాయకుడికి స్వాగతం! ఒక సేవను ఎంచుకోండి:',
+      symptoms: '🔍 లక్షణాలు',
+      vaccines: '💉 వ్యాక్సిన్లు',
+      alerts: '🚨 హెచ్చరికలు'
+    },
+    te_roman: {
+      header: '🏥 Arogya Sahayaka Menu',
+      body: 'Mee samagra arogya sahayakudiki swagatam! Oka sevanu enchukondi:',
+      symptoms: '🔍 Lakshanalu',
+      vaccines: '💉 Vaccines',
+      alerts: '🚨 Alerts'
+    },
+    ta: {
+      header: '🏥 சுகாதார உதவியாளர் மெனு',
+      body: 'உங்கள் விரிவான சுகாதார உதவியாளருக்கு வரவேற்கிறோம்! ஒரு சேவையைத் தேர்ந்தெடுக்கவும்:',
+      symptoms: '🔍 அறிகுறிகள்',
+      vaccines: '💉 தடுப்பூசிகள்',
+      alerts: '🚨 எச்சரிக்கைகள்'
+    },
+    ta_roman: {
+      header: '🏥 Sugathara Uthaviyalar Menu',
+      body: 'Unga virivana sugathara uthaviyalarukku varaverpkirom! Oru sevaiyai thernthedukavum:',
+      symptoms: '🔍 Arikurikal',
+      vaccines: '💉 Thaduppusikal',
+      alerts: '🚨 Echarikaikal'
+    },
+    or: {
+      header: '🏥 ସ୍ୱାସ୍ଥ୍ୟ ସହାୟକ ମେନୁ',
+      body: 'ଆପଣଙ୍କର ବ୍ୟାପକ ସ୍ୱାସ୍ଥ୍ୟ ସହାୟକଙ୍କୁ ସ୍ୱାଗତ! ଏକ ସେବା ବାଛନ୍ତୁ:',
+      symptoms: '🔍 ଲକ୍ଷଣ',
+      vaccines: '💉 ଟିକା',
+      alerts: '🚨 ସତର୍କତା'
+    },
+    or_roman: {
+      header: '🏥 Swasthya Sahayaka Menu',
+      body: 'Apankara byapaka swasthya sahayakankku swagata! Eka seva bachhantu:',
+      symptoms: '🔍 Lakshana',
+      vaccines: '💉 Tika',
+      alerts: '🚨 Satarkata'
+    }
+  };
+
+  const lang = translations[userLanguage] || translations.en;
+
   return {
     type: 'interactive',
     interactive: {
       type: 'button',
       header: {
         type: 'text',
-        text: '🏥 Healthcare Assistant Menu'
+        text: lang.header
       },
       body: {
-        text: 'Welcome to your comprehensive healthcare assistant! Choose a service:'
+        text: lang.body
       },
       action: {
         buttons: [
@@ -19,21 +87,21 @@ const generateMainMenuButtons = () => {
             type: 'reply',
             reply: {
               id: 'symptom_checker',
-              title: '🔍 Symptoms'
+              title: lang.symptoms
             }
           },
           {
             type: 'reply',
             reply: {
               id: 'vaccination_tracker',
-              title: '💉 Vaccines'
+              title: lang.vaccines
             }
           },
           {
             type: 'reply',
             reply: {
               id: 'health_alerts',
-              title: '🚨 Alerts'
+              title: lang.alerts
             }
           }
         ]
@@ -85,17 +153,85 @@ const generateSecondaryMenuButtons = () => {
 };
 
 // Generate symptom checker flow buttons
-const generateSymptomCheckerButtons = () => {
+const generateSymptomCheckerButtons = (userLanguage = 'en') => {
+  const translations = {
+    en: {
+      header: '🔍 Symptom Checker',
+      body: 'How would you like to check your symptoms?',
+      describe: '📝 Describe',
+      categories: '📋 Categories',
+      emergency: '🚨 Emergency'
+    },
+    hi: {
+      header: '🔍 लक्षण जांचकर्ता',
+      body: 'आप अपने लक्षणों की जांच कैसे करना चाहते हैं?',
+      describe: '📝 वर्णन करें',
+      categories: '📋 श्रेणियां',
+      emergency: '🚨 आपातकाल'
+    },
+    hi_roman: {
+      header: '🔍 Lakshan Janchkarta',
+      body: 'Aap apne lakshanon ki janch kaise karna chahte hain?',
+      describe: '📝 Varnan Karen',
+      categories: '📋 Shreniyan',
+      emergency: '🚨 Apatkal'
+    },
+    te: {
+      header: '🔍 లక్షణ పరీక్షకుడు',
+      body: 'మీరు మీ లక్షణాలను ఎలా తనిఖీ చేయాలని అనుకుంటున్నారు?',
+      describe: '📝 వివరించండి',
+      categories: '📋 వర్గాలు',
+      emergency: '🚨 అత్యవసరం'
+    },
+    te_roman: {
+      header: '🔍 Lakshana Pareekshakudu',
+      body: 'Meeru mee lakshanaalanu ela thanikhi cheyaalani anukuntunnaaru?',
+      describe: '📝 Vivarinchandi',
+      categories: '📋 Vargaalu',
+      emergency: '🚨 Atyavasaram'
+    },
+    ta: {
+      header: '🔍 அறிகுறி சரிபார்ப்பாளர்',
+      body: 'உங்கள் அறிகுறிகளை எப்படி சரிபார்க்க விரும்புகிறீர்கள்?',
+      describe: '📝 விவரிக்கவும்',
+      categories: '📋 வகைகள்',
+      emergency: '🚨 அவசரநிலை'
+    },
+    ta_roman: {
+      header: '🔍 Arikuri Sariparpalar',
+      body: 'Unga arikurikaḷai eppadi sariparkka virumbugireergal?',
+      describe: '📝 Vivarikavum',
+      categories: '📋 Vakaikal',
+      emergency: '🚨 Avasarniḷai'
+    },
+    or: {
+      header: '🔍 ଲକ୍ଷଣ ପରୀକ୍ଷକ',
+      body: 'ଆପଣ ଆପଣଙ୍କର ଲକ୍ଷଣଗୁଡ଼ିକୁ କିପରି ଯାଞ୍ଚ କରିବାକୁ ଚାହାଁନ୍ତି?',
+      describe: '📝 ବର୍ଣ୍ଣନା କରନ୍ତୁ',
+      categories: '📋 ବର୍ଗଗୁଡ଼ିକ',
+      emergency: '🚨 ଜରୁରୀକାଳୀନ'
+    },
+    or_roman: {
+      header: '🔍 Lakshana Pareekshaka',
+      body: 'Aapana aapankara lakshanaguḍikaku kipari yancha karibaku chahaanti?',
+      describe: '📝 Barnana Karantu',
+      categories: '📋 Bargaguḍika',
+      emergency: '🚨 Jarurikalina'
+    }
+  };
+
+  const lang = translations[userLanguage] || translations.en;
+
   return {
     type: 'interactive',
     interactive: {
       type: 'button',
       header: {
         type: 'text',
-        text: '🔍 Symptom Checker'
+        text: lang.header
       },
       body: {
-        text: 'How would you like to check your symptoms?'
+        text: lang.body
       },
       action: {
         buttons: [
@@ -103,21 +239,21 @@ const generateSymptomCheckerButtons = () => {
             type: 'reply',
             reply: {
               id: 'symptom_describe',
-              title: '📝 Describe'
+              title: lang.describe
             }
           },
           {
             type: 'reply',
             reply: {
               id: 'symptom_categories',
-              title: '📋 Categories'
+              title: lang.categories
             }
           },
           {
             type: 'reply',
             reply: {
               id: 'emergency_check',
-              title: '🚨 Emergency'
+              title: lang.emergency
             }
           }
         ]

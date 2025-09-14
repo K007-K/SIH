@@ -396,14 +396,16 @@ const handleInteractiveMessage = async (message, contact) => {
     
     // Main menu navigation
     if (buttonId === 'main_menu' || buttonId === 'menu') {
-      interactiveResponse = generateMainMenuButtons();
+      const userLanguage = getUserLanguage(userPhone);
+      interactiveResponse = generateMainMenuButtons(userLanguage);
       
     } else if (buttonId === 'more_services') {
       interactiveResponse = generateSecondaryMenuButtons();
       
     // Symptom Checker Flow
     } else if (buttonId === 'symptom_checker') {
-      interactiveResponse = generateSymptomCheckerButtons();
+      const userLanguage = getUserLanguage(userPhone);
+      interactiveResponse = generateSymptomCheckerButtons(userLanguage);
       
     } else if (buttonId === 'symptom_describe') {
       responseMessage = '📝 Please describe your symptoms in detail. For example: "I have fever, headache, and cough for 2 days"';
@@ -484,7 +486,8 @@ const handleInteractiveMessage = async (message, contact) => {
     } else if (buttonId === 'lang_en') {
       await updateUserLanguage(userPhone, 'en');
       responseMessage = 'Great! I\'ll assist you in English. How can I help you with your health concerns today?';
-      interactiveResponse = generateMainMenuButtons();
+      const userLanguage = getUserLanguage(userPhone);
+      interactiveResponse = generateMainMenuButtons(userLanguage);
       
     } else if (buttonId === 'regional_langs') {
       interactiveResponse = generateRegionalLanguageButtons();
@@ -514,14 +517,16 @@ const handleInteractiveMessage = async (message, contact) => {
       };
       
       responseMessage = `Perfect! I'll assist you in ${languageNames[language]}. How can I help you with your health concerns today?`;
-      interactiveResponse = generateMainMenuButtons();
+      const userLanguage = getUserLanguage(userPhone);
+      interactiveResponse = generateMainMenuButtons(userLanguage);
       
     } else if (buttonId === 'back_to_languages') {
       interactiveResponse = generateLanguageButtons();
       
     } else {
       responseMessage = 'I didn\'t understand that selection. Please try again or type your question.';
-      interactiveResponse = generateMainMenuButtons();
+      const userLanguage = getUserLanguage(userPhone);
+      interactiveResponse = generateMainMenuButtons(userLanguage);
     }
     
     // Send response
@@ -556,7 +561,8 @@ const handleIncomingMessage = async (message, contact) => {
     
     // Check for menu command
     if (messageText.toLowerCase().includes('menu') || messageText.toLowerCase().includes('help') || messageText === '/' || messageText === 'start') {
-      const menuButtons = generateMainMenuButtons();
+      const userLanguage = getUserLanguage(phoneNumber);
+      const menuButtons = generateMainMenuButtons(userLanguage);
       await sendWhatsAppInteractiveMessage(phoneNumber, menuButtons);
       return;
     }
