@@ -132,6 +132,7 @@ const sendWhatsAppMessage = async (to, message) => {
   }
 };
 
+// getGeminiResponse function is now imported from utils/aiUtils.js
 
 // Deprecated Llama function - now using Gemini only
 const getLlamaResponse = async (prompt, imageData = null) => {
