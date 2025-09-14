@@ -43,21 +43,21 @@ const generateFeedbackButtons = () => {
             type: 'reply',
             reply: {
               id: 'feedback_excellent',
-              title: '⭐⭐⭐⭐⭐ Excellent'
+              title: '⭐ Excellent'
             }
           },
           {
             type: 'reply',
             reply: {
               id: 'feedback_good',
-              title: '⭐⭐⭐⭐ Good'
+              title: '⭐ Good'
             }
           },
           {
             type: 'reply',
             reply: {
               id: 'feedback_average',
-              title: '⭐⭐⭐ Average'
+              title: '⭐ Average'
             }
           }
         ]
@@ -85,21 +85,21 @@ const generateDetailedFeedbackButtons = () => {
             type: 'reply',
             reply: {
               id: 'feedback_accuracy',
-              title: '🎯 Rate Accuracy'
+              title: '🎯 Accuracy'
             }
           },
           {
             type: 'reply',
             reply: {
               id: 'feedback_helpfulness',
-              title: '🤝 Rate Helpfulness'
+              title: '🤝 Helpful'
             }
           },
           {
             type: 'reply',
             reply: {
               id: 'feedback_clarity',
-              title: '💡 Rate Clarity'
+              title: '💡 Clarity'
             }
           }
         ]
@@ -127,21 +127,21 @@ const generateImprovementButtons = () => {
             type: 'reply',
             reply: {
               id: 'improve_accuracy',
-              title: '🎯 More Accurate Info'
+              title: '🎯 Accuracy'
             }
           },
           {
             type: 'reply',
             reply: {
               id: 'improve_speed',
-              title: '⚡ Faster Response'
+              title: '⚡ Speed'
             }
           },
           {
             type: 'reply',
             reply: {
               id: 'improve_features',
-              title: '✨ New Features'
+              title: '✨ Features'
             }
           }
         ]
@@ -169,21 +169,21 @@ const generateIssueReportButtons = () => {
             type: 'reply',
             reply: {
               id: 'issue_incorrect_info',
-              title: '❌ Incorrect Information'
+              title: '❌ Wrong Info'
             }
           },
           {
             type: 'reply',
             reply: {
               id: 'issue_technical',
-              title: '⚙️ Technical Problem'
+              title: '⚙️ Technical'
             }
           },
           {
             type: 'reply',
             reply: {
               id: 'issue_other',
-              title: '❓ Other Issue'
+              title: '❓ Other'
             }
           }
         ]
@@ -299,21 +299,21 @@ const generateSatisfactionSurvey = () => {
             type: 'reply',
             reply: {
               id: 'survey_start',
-              title: '📝 Start Survey'
+              title: '📝 Start'
             }
           },
           {
             type: 'reply',
             reply: {
               id: 'survey_later',
-              title: '⏰ Remind Me Later'
+              title: '⏰ Later'
             }
           },
           {
             type: 'reply',
             reply: {
               id: 'survey_skip',
-              title: '⏭️ Skip Survey'
+              title: '⏭️ Skip'
             }
           }
         ]

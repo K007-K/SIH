@@ -121,21 +121,21 @@ const generateOutbreakAlertsButtons = () => {
             type: 'reply',
             reply: {
               id: 'current_outbreaks',
-              title: '⚠️ Current Outbreaks'
+              title: '⚠️ Outbreaks'
             }
           },
           {
             type: 'reply',
             reply: {
               id: 'seasonal_health',
-              title: '🌡️ Seasonal Alerts'
+              title: '🌡️ Seasonal'
             }
           },
           {
             type: 'reply',
             reply: {
               id: 'local_alerts',
-              title: '📍 Local Health News'
+              title: '📍 Local News'
             }
           }
         ]
@@ -163,21 +163,21 @@ const generateOutbreakLevelButtons = () => {
             type: 'reply',
             reply: {
               id: 'global_outbreaks',
-              title: '🌍 Global Outbreaks'
+              title: '🌍 Global'
             }
           },
           {
             type: 'reply',
             reply: {
               id: 'india_outbreaks',
-              title: '🇮🇳 India Outbreaks'
+              title: '🇮🇳 India'
             }
           },
           {
             type: 'reply',
             reply: {
               id: 'regional_outbreaks',
-              title: '📍 Regional Alerts'
+              title: '📍 Regional'
             }
           }
         ]
@@ -205,21 +205,21 @@ const generateSeasonalHealthButtons = () => {
             type: 'reply',
             reply: {
               id: 'winter_health',
-              title: '❄️ Winter Health'
+              title: '❄️ Winter'
             }
           },
           {
             type: 'reply',
             reply: {
               id: 'summer_health',
-              title: '☀️ Summer Health'
+              title: '☀️ Summer'
             }
           },
           {
             type: 'reply',
             reply: {
               id: 'monsoon_health',
-              title: '🌧️ Monsoon Health'
+              title: '🌧️ Monsoon'
             }
           }
         ]
@@ -317,14 +317,14 @@ const generateAlertSubscriptionButtons = () => {
             type: 'reply',
             reply: {
               id: 'subscribe_alerts',
-              title: '🔔 Subscribe to Alerts'
+              title: '🔔 Subscribe'
             }
           },
           {
             type: 'reply',
             reply: {
               id: 'alert_preferences',
-              title: '⚙️ Alert Preferences'
+              title: '⚙️ Preferences'
             }
           },
           {

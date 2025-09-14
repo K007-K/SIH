@@ -133,21 +133,21 @@ const generateVaccinationTrackerButtons = () => {
             type: 'reply',
             reply: {
               id: 'vacc_age_schedule',
-              title: '📅 Age-based Schedule'
+              title: '📅 Age Schedule'
             }
           },
           {
             type: 'reply',
             reply: {
               id: 'vacc_due_check',
-              title: '⏰ Check Due Vaccines'
+              title: '⏰ Check Due'
             }
           },
           {
             type: 'reply',
             reply: {
               id: 'vacc_record',
-              title: '📋 My Vaccine Record'
+              title: '📋 My Record'
             }
           }
         ]
@@ -175,21 +175,21 @@ const generateAgeGroupButtons = () => {
             type: 'reply',
             reply: {
               id: 'age_infant',
-              title: '👶 Infant (0-2 years)'
+              title: '👶 Infant'
             }
           },
           {
             type: 'reply',
             reply: {
               id: 'age_child',
-              title: '👧 Child (2-12 years)'
+              title: '👧 Child'
             }
           },
           {
             type: 'reply',
             reply: {
               id: 'age_teen',
-              title: '🧑 Teen (12-18 years)'
+              title: '🧑 Teen'
             }
           }
         ]
@@ -217,14 +217,14 @@ const generateMoreAgeGroups = () => {
             type: 'reply',
             reply: {
               id: 'age_adult',
-              title: '👨 Adult (18-65 years)'
+              title: '👨 Adult'
             }
           },
           {
             type: 'reply',
             reply: {
               id: 'age_senior',
-              title: '👴 Senior (65+ years)'
+              title: '👴 Senior'
             }
           },
           {
@@ -332,21 +332,21 @@ const generateReminderButtons = () => {
             type: 'reply',
             reply: {
               id: 'reminder_setup',
-              title: '🔔 Setup Reminders'
+              title: '🔔 Setup'
             }
           },
           {
             type: 'reply',
             reply: {
               id: 'reminder_view',
-              title: '📋 View Reminders'
+              title: '📋 View'
             }
           },
           {
             type: 'reply',
             reply: {
               id: 'reminder_update',
-              title: '✏️ Update Reminders'
+              title: '✏️ Update'
             }
           }
         ]

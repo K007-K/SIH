@@ -105,7 +105,7 @@ const generateEmergencyCheckButtons = () => {
             type: 'reply',
             reply: {
               id: 'emergency_breathing',
-              title: '😰 Breathing Problems'
+              title: '😰 Breathing'
             }
           },
           {
@@ -119,7 +119,7 @@ const generateEmergencyCheckButtons = () => {
             type: 'reply',
             reply: {
               id: 'emergency_other',
-              title: '🆘 Other Emergency'
+              title: '🆘 Other'
             }
           }
         ]

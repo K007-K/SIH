@@ -19,21 +19,21 @@ const generateMainMenuButtons = () => {
             type: 'reply',
             reply: {
               id: 'symptom_checker',
-              title: '🔍 Symptom Checker'
+              title: '🔍 Symptoms'
             }
           },
           {
             type: 'reply',
             reply: {
               id: 'vaccination_tracker',
-              title: '💉 Vaccination Tracker'
+              title: '💉 Vaccines'
             }
           },
           {
             type: 'reply',
             reply: {
               id: 'health_alerts',
-              title: '🚨 Health Alerts'
+              title: '🚨 Alerts'
             }
           }
         ]
@@ -61,21 +61,21 @@ const generateSecondaryMenuButtons = () => {
             type: 'reply',
             reply: {
               id: 'preventive_care',
-              title: '🛡️ Preventive Care'
+              title: '🛡️ Prevention'
             }
           },
           {
             type: 'reply',
             reply: {
               id: 'health_quiz',
-              title: '🧠 Health Quiz'
+              title: '🧠 Quiz'
             }
           },
           {
             type: 'reply',
             reply: {
               id: 'feedback',
-              title: '⭐ Give Feedback'
+              title: '⭐ Feedback'
             }
           }
         ]
@@ -103,21 +103,21 @@ const generateSymptomCheckerButtons = () => {
             type: 'reply',
             reply: {
               id: 'symptom_describe',
-              title: '📝 Describe Symptoms'
+              title: '📝 Describe'
             }
           },
           {
             type: 'reply',
             reply: {
               id: 'symptom_categories',
-              title: '📋 Browse by Category'
+              title: '📋 Categories'
             }
           },
           {
             type: 'reply',
             reply: {
               id: 'emergency_check',
-              title: '🚨 Emergency Check'
+              title: '🚨 Emergency'
             }
           }
         ]
@@ -145,21 +145,21 @@ const generateVaccinationButtons = () => {
             type: 'reply',
             reply: {
               id: 'vacc_schedule',
-              title: '📅 My Schedule'
+              title: '📅 Schedule'
             }
           },
           {
             type: 'reply',
             reply: {
               id: 'vacc_due',
-              title: '⏰ Due Vaccines'
+              title: '⏰ Due Soon'
             }
           },
           {
             type: 'reply',
             reply: {
               id: 'vacc_info',
-              title: 'ℹ️ Vaccine Info'
+              title: 'ℹ️ Info'
             }
           }
         ]
@@ -187,21 +187,21 @@ const generateHealthAlertsButtons = () => {
             type: 'reply',
             reply: {
               id: 'outbreak_alerts',
-              title: '⚠️ Outbreak Alerts'
+              title: '⚠️ Outbreaks'
             }
           },
           {
             type: 'reply',
             reply: {
               id: 'seasonal_health',
-              title: '🌡️ Seasonal Health'
+              title: '🌡️ Seasonal'
             }
           },
           {
             type: 'reply',
             reply: {
               id: 'local_health',
-              title: '📍 Local Health News'
+              title: '📍 Local News'
             }
           }
         ]
@@ -229,21 +229,21 @@ const generatePreventiveCareButtons = () => {
             type: 'reply',
             reply: {
               id: 'nutrition_tips',
-              title: '🥗 Nutrition Tips'
+              title: '🥗 Nutrition'
             }
           },
           {
             type: 'reply',
             reply: {
               id: 'exercise_guide',
-              title: '🏃 Exercise Guide'
+              title: '🏃 Exercise'
             }
           },
           {
             type: 'reply',
             reply: {
               id: 'hygiene_tips',
-              title: '🧼 Hygiene Tips'
+              title: '🧼 Hygiene'
             }
           }
         ]
@@ -271,21 +271,21 @@ const generateFeedbackButtons = () => {
             type: 'reply',
             reply: {
               id: 'rate_response',
-              title: '⭐ Rate Last Response'
+              title: '⭐ Rate'
             }
           },
           {
             type: 'reply',
             reply: {
               id: 'suggest_improvement',
-              title: '💡 Suggest Improvement'
+              title: '💡 Suggest'
             }
           },
           {
             type: 'reply',
             reply: {
               id: 'report_issue',
-              title: '🐛 Report Issue'
+              title: '🐛 Report'
             }
           }
         ]
