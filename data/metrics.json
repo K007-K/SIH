@@ -1,0 +1,66 @@
+{
+  "userInteractions": {
+    "9876543210": {
+      "firstInteraction": "2025-09-14",
+      "totalInteractions": 1,
+      "topicsAccessed": [
+        "symptoms"
+      ],
+      "languageUsed": "en",
+      "healthQueriesAsked": 1,
+      "preventiveContentViewed": 0,
+      "lastActive": "2025-09-14"
+    }
+  },
+  "dailyStats": {
+    "2025-09-14": {
+      "uniqueUsers": [
+        "9876543210"
+      ],
+      "totalInteractions": 1,
+      "healthQueries": 1,
+      "preventiveViews": 0
+    }
+  },
+  "topicEngagement": {
+    "preventiveHealthcare": {
+      "views": 0,
+      "interactions": 0
+    },
+    "diseaseSymptoms": {
+      "views": 0,
+      "interactions": 0
+    },
+    "vaccination": {
+      "views": 0,
+      "interactions": 0
+    },
+    "outbreakAlerts": {
+      "views": 0,
+      "interactions": 0
+    },
+    "governmentServices": {
+      "views": 0,
+      "interactions": 0
+    }
+  },
+  "languagePreferences": {
+    "en": 1,
+    "hi": 0,
+    "te": 0,
+    "ta": 0,
+    "or": 0
+  },
+  "healthQueries": {
+    "total": 1,
+    "resolved": 0,
+    "emergency": 0,
+    "preventive": 0
+  },
+  "awarenessImpact": {
+    "usersEducated": 0,
+    "healthTipsShared": 0,
+    "vaccinationReminders": 0,
+    "outbreakAlertsDelivered": 0
+  }
+}
