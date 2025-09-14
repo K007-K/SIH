@@ -486,12 +486,15 @@ const handleInteractiveMessage = async (message, contact) => {
       responseMessage = 'Great! I\'ll assist you in English. How can I help you with your health concerns today?';
       interactiveResponse = generateMainMenuButtons();
       
-    } else if (buttonId === 'lang_regional') {
+    } else if (buttonId === 'regional_langs') {
       interactiveResponse = generateRegionalLanguageButtons();
+      
+    } else if (buttonId === 'lang_hi') {
+      interactiveResponse = generateScriptTypeButtons('hi');
       
     } else if (buttonId.startsWith('lang_')) {
       const language = buttonId.replace('lang_', '');
-      if (['te', 'ta', 'hi', 'or'].includes(language)) {
+      if (['te', 'ta', 'or'].includes(language)) {
         interactiveResponse = generateScriptTypeButtons(language);
       }
       
