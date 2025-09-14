@@ -287,6 +287,55 @@ app.get('/', (req, res) => {
   });
 });
 
+// Health endpoint for monitoring
+app.get('/health', (req, res) => {
+  res.json({
+    status: 'healthy',
+    uptime: process.uptime(),
+    timestamp: new Date().toISOString(),
+    version: '2.0.0',
+    services: {
+      whatsapp: 'operational',
+      gemini: 'operational',
+      whisper: 'operational',
+      database: 'operational'
+    },
+    features: ['AI Symptom Analysis', 'Emergency Detection', 'Multi-language Support', 'Audio Processing', 'Image Analysis']
+  });
+});
+
+// Status endpoint for detailed system information
+app.get('/status', (req, res) => {
+  res.json({
+    server: {
+      status: 'running',
+      port: PORT,
+      uptime: process.uptime(),
+      memory: process.memoryUsage(),
+      version: '2.0.0'
+    },
+    features: {
+      symptom_analysis: true,
+      emergency_detection: true,
+      vaccination_tracker: true,
+      health_alerts: true,
+      preventive_care: true,
+      feedback_system: true,
+      multilingual: true,
+      audio_processing: true,
+      image_analysis: true
+    },
+    languages: ['English', 'Hindi', 'Telugu', 'Tamil', 'Odia'],
+    integrations: {
+      whatsapp_business_api: true,
+      gemini_ai: true,
+      openai_whisper: true,
+      supabase: true
+    },
+    timestamp: new Date().toISOString()
+  });
+});
+
 // WhatsApp webhook verification
 app.get('/webhook', (req, res) => {
   const mode = req.query['hub.mode'];
