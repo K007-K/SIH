@@ -295,6 +295,40 @@ const handleIncomingMessage = async (message, contact) => {
       await updateUserLanguage(phoneNumber, 'en'); // Default to English
       return;
     }
+
+    // Check if user wants to change language during conversation
+    if (message.type === 'text' && messageText) {
+      const lowerText = messageText.toLowerCase();
+      const languageChangeKeywords = [
+        'change language', 'switch language', 'language change', 'different language',
+        'भाषा बदलें', 'भाषा बदलो', 'language badlo', 'language change karo',
+        'భాష మార్చు', 'భాష మార్చండి', 'language change cheyandi',
+        'மொழி மாற்று', 'மொழியை மாற்று', 'language change pannu',
+        'ଭାଷା ବଦଳାନ୍ତୁ', 'language change kara'
+      ];
+
+      const wantsLanguageChange = languageChangeKeywords.some(keyword => 
+        lowerText.includes(keyword)
+      );
+
+      if (wantsLanguageChange) {
+        const currentLang = getUserLanguage(phoneNumber);
+        const languageChangeMessages = {
+          en: '🌐 Sure! Please select your preferred language:',
+          hi: '🌐 जरूर! कृपया अपनी पसंदीदा भाषा चुनें:',
+          te: '🌐 తప్పకుండా! దయచేసి మీ ఇష్టమైన భాషను ఎంచుకోండి:',
+          ta: '🌐 நிச்சயமாக! உங்கள் விருப்பமான மொழியைத் தேர்ந்தெடுக்கவும்:',
+          or: '🌐 ଅବଶ୍ୟ! ଦୟାକରି ଆପଣଙ୍କର ପସନ୍ଦର ଭାଷା ବାଛନ୍ତୁ:'
+        };
+
+        const responseMessage = languageChangeMessages[currentLang] || languageChangeMessages.en;
+        await sendWhatsAppMessage(phoneNumber, responseMessage);
+        
+        const languageButtons = generateLanguageButtons();
+        await sendWhatsAppInteractiveMessage(phoneNumber, languageButtons);
+        return;
+      }
+    }
     
     // Get user's preferred language
     const userLanguage = getUserLanguage(phoneNumber);
