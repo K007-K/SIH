@@ -551,13 +551,12 @@ Please provide healthcare guidance based on this voice message.`;
         const detectedLanguage = await detectLanguage(imageCaption);
         const finalLanguage = detectedLanguage || userLanguage;
         
-        const analysisPrompt = `Analyze this medical image and provide healthcare guidance. 
+        const analysisPrompt = `Analyze this medical image briefly and provide simple healthcare guidance.
 Image caption: ${imageCaption}
-Please provide:
-1. What you observe in the image
-2. Possible medical concerns
-3. Recommended actions
-4. When to seek professional help`;
+Provide a SHORT response (2-3 sentences max) with:
+1. What you see
+2. Simple recommendation
+3. When to see a doctor (if needed)`;
         
         aiResponse = await getGeminiResponse(
           analysisPrompt,

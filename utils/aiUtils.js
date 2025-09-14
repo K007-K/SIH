@@ -228,20 +228,26 @@ Provide accurate, evidence-based medical guidance in Tamil script.`,
 
 Provide accurate, evidence-based medical guidance in Odia script.`,
     
-    // Enhanced English prompt
+    // Enhanced English prompt with image analysis optimization
     en: `You are an expert healthcare assistant with deep medical knowledge. Provide accurate, evidence-based medical guidance in English.
 
 **Response Guidelines:**
-- Be concise for simple queries (1-2 sentences)
-- Provide detailed explanations for complex medical topics
+- For IMAGE ANALYSIS: Keep responses SHORT and user-friendly (2-3 sentences max)
+- For simple queries: Be concise (1-2 sentences)
+- For complex topics: Provide detailed explanations only when necessary
 - Use clear, accessible language avoiding unnecessary jargon
 - Include practical steps and recommendations
 - Always emphasize consulting healthcare professionals for serious conditions
 - Show empathy and understanding
-- Structure responses with bullet points or numbered lists when helpful
+
+**Image Analysis Format:**
+1. Brief observation (1 sentence)
+2. Simple recommendation (1-2 sentences)
+3. When to see a doctor (if needed)
 
 **Knowledge Areas:**
 - General medicine, symptoms, and treatments
+- Medical image analysis (skin conditions, wounds, etc.)
 - Preventive healthcare and wellness
 - Medication information and interactions
 - Emergency care guidance
@@ -372,8 +378,11 @@ const getGeminiResponse = async (prompt, imageData = null, language = 'en') => {
   }
 };
 
-// Convert audio to text using OpenAI Whisper (supports Opus format)
-const transcribeAudio = async (audioBuffer, mimeType = 'audio/ogg; codecs=opus') => {
+// Convert audio to text using OpenAI Whisper with retry logic for rate limits
+const transcribeAudio = async (audioBuffer, mimeType = 'audio/ogg; codecs=opus', retryCount = 0) => {
+  const maxRetries = 3;
+  const baseDelay = 1000; // 1 second
+  
   try {
     const apiKey = process.env.OPENAI_API_KEY;
     if (!apiKey) {
@@ -393,12 +402,33 @@ const transcribeAudio = async (audioBuffer, mimeType = 'audio/ogg; codecs=opus')
         'Authorization': `Bearer ${apiKey}`,
         ...formData.getHeaders()
       },
-      timeout: 30000
+      timeout: 45000 // Increased timeout
     });
 
     return response.data.text || '';
   } catch (error) {
-    console.error('Audio transcription error:', error.message);
+    console.error(`Audio transcription error (attempt ${retryCount + 1}):`, {
+      message: error.message,
+      status: error.response?.status,
+      retryAfter: error.response?.headers['retry-after']
+    });
+    
+    // Handle rate limiting (429) with exponential backoff
+    if (error.response?.status === 429 && retryCount < maxRetries) {
+      const retryAfter = error.response.headers['retry-after'];
+      const delay = retryAfter ? parseInt(retryAfter) * 1000 : baseDelay * Math.pow(2, retryCount);
+      
+      console.log(`Rate limited. Retrying in ${delay}ms...`);
+      await new Promise(resolve => setTimeout(resolve, delay));
+      
+      return transcribeAudio(audioBuffer, mimeType, retryCount + 1);
+    }
+    
+    // Handle other errors or max retries reached
+    if (error.response?.status === 429) {
+      throw new Error('OpenAI API rate limit exceeded. Please try again later.');
+    }
+    
     throw error;
   }
 };
