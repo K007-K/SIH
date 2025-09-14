@@ -2,53 +2,8 @@
 // File: utils/aiUtils.js
 
 const axios = require('axios');
+const FormData = require('form-data');
 require('dotenv').config();
-
-// Enhanced language detection function with transliteration support
-const detectLanguage = (text) => {
-  const lowerText = text.toLowerCase();
-  
-  // Check for script-based languages first
-  const scriptPatterns = {
-    hi: /[\u0900-\u097F]/, // Devanagari (Hindi)
-    te: /[\u0C00-\u0C7F]/, // Telugu
-    ta: /[\u0B80-\u0BFF]/, // Tamil
-    or: /[\u0B00-\u0B7F]/  // Odia
-  };
-
-  // Check for native scripts first
-  for (const [lang, pattern] of Object.entries(scriptPatterns)) {
-    if (pattern.test(text)) {
-      return lang;
-    }
-  }
-
-  // Check for transliterated patterns
-  const transliterationPatterns = {
-    // Telugu transliteration (removed ambiguous English words like 'fever', 'treat')
-    te_trans: /\b(nuvvu|meeru|naaku|enti|ela|unnavu|unnaru|cheppandi|telugu|vachindi|cheyyali|bagundi|manchidi)\b/i,
-    
-    // Hindi transliteration
-    hi_trans: /\b(main|hain|hai|nahi|kyun|kaise|kya|aap|tum|mujhe|tumhe|hindi|accha|theek|namaste|bukhar|karna|chahiye)\b/i,
-    
-    // Tamil transliteration
-    ta_trans: /\b(naan|neenga|eppadi|irukeenga|tamil|nalla|romba|enna|eppo|kaichal|vanthuchu|seyyanum)\b/i,
-    
-    // Odia transliteration (corrected 'kaichal' to 'jara')
-    or_trans: /\b(mu|tume|kemiti|achanti|odia|bhala|bahut|jara|helechi|kariba)\b/i
-  };
-
-  // Check transliteration patterns
-  for (const [langCode, pattern] of Object.entries(transliterationPatterns)) {
-    if (pattern.test(lowerText)) {
-      const lang = langCode.replace('_trans', '');
-      return lang + '_trans'; // Mark as transliterated
-    }
-  }
-  
-  
-  return 'en'; // Default to English
-};
 
 // System prompts for different languages and transliteration
 const getSystemPrompt = (language) => {
@@ -59,7 +14,6 @@ const getSystemPrompt = (language) => {
 **Response Flow:**
 1.  **Acknowledge**: Start by acknowledging the user's problem. If they say "naaku jwaram vachindi", you should start with something like "Oh, meeku jwaram vachindi ani ardhamaindi." or simply repeat the key phrase "naaku jwaram vachindi".
 2.  **Provide Guidance**: Give clear, step-by-step medical advice.
-3.  **Disclaimer**: Always include a disclaimer to consult a doctor.
 
 **Grammar Rules:**
 - "nannu" = "me" (object) - Use for "excuse me/forgive me". Example: "nannu kshamimchandi"
@@ -126,119 +80,249 @@ Use only ASCII characters. Provide healthcare guidance in Hindi transliteration.
     or: `You are an Odia healthcare assistant. Respond only in Odia script. Provide medical guidance in Odia.`,
     
     // Default English
-    en: `You are a multilingual healthcare assistant. Provide medical guidance in English. Always include safety disclaimers and recommend consulting healthcare professionals for serious symptoms.`
+    en: `You are a multilingual healthcare assistant. Provide medical guidance in English. Be friendly and conversational.`
   };
 
   return systemPrompts[language] || systemPrompts.en;
 };
 
-// Gemini AI response function with multilingual support
-const getGeminiResponse = async (prompt, imageData = null, userLanguage = 'en') => {
+// AI-based language detection using Gemini
+const detectLanguage = async (text) => {
+  try {
+    const apiKey = process.env.GEMINI_API_KEY;
+    if (!apiKey) {
+      return 'en'; // Default to English if no API key
+    }
+
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-exp:generateContent?key=${apiKey}`;
+    
+    const prompt = `Detect the language of this text and respond with ONLY the language code. Supported languages:
+- en (English)
+- hi (Hindi - Devanagari script)
+- hi_trans (Hindi in Roman letters/transliteration)
+- te (Telugu - Telugu script)
+- te_trans (Telugu in Roman letters/transliteration)
+- ta (Tamil - Tamil script)
+- ta_trans (Tamil in Roman letters/transliteration)
+- or (Odia - Odia script)
+- or_trans (Odia in Roman letters/transliteration)
+
+Text: "${text}"
+
+Respond with ONLY the language code (e.g., "hi", "te_trans", "en"):`;
+
+    const requestBody = {
+      contents: [{
+        parts: [{ text: prompt }]
+      }],
+      generationConfig: {
+        temperature: 0.1,
+        maxOutputTokens: 10
+      }
+    };
+
+    const response = await axios.post(url, requestBody, {
+      headers: { 'Content-Type': 'application/json' },
+      timeout: 5000
+    });
+
+    if (response.data?.candidates?.[0]?.content?.parts?.[0]?.text) {
+      const detectedLang = response.data.candidates[0].content.parts[0].text.trim().toLowerCase();
+      const supportedLangs = ['en', 'hi', 'hi_trans', 'te', 'te_trans', 'ta', 'ta_trans', 'or', 'or_trans'];
+      return supportedLangs.includes(detectedLang) ? detectedLang : 'en';
+    }
+  } catch (error) {
+    console.error('Language detection error:', error.message);
+  }
+  
+  return 'en'; // Default to English on error
+};
+
+// Gemini AI response function with Gemini 2.0 Flash
+const getGeminiResponse = async (prompt, imageData = null, language = 'en') => {
   try {
     const apiKey = process.env.GEMINI_API_KEY;
     if (!apiKey) {
       throw new Error('GEMINI_API_KEY not configured');
     }
 
+    // Use Gemini 2.0 Flash for all responses
     const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-exp:generateContent?key=${apiKey}`;
     
-    // Get system prompt based on detected language
-    const systemPrompt = getSystemPrompt(userLanguage);
-    const fullPrompt = `${systemPrompt}\n\nUser message: ${prompt}`;
-    
+    // Get system prompt based on language
+    const systemPrompt = getSystemPrompt(language);
+    const fullPrompt = `${systemPrompt}\n\nUser: ${prompt}`;
+
     let requestBody;
-    
+
     if (imageData) {
-      // Handle image + text request
+      // Handle image analysis
       requestBody = {
         contents: [{
           parts: [
             { text: fullPrompt },
             {
               inline_data: {
-                mime_type: imageData.mimeType || 'image/jpeg',
+                mime_type: imageData.mimeType,
                 data: imageData.data
               }
             }
           ]
         }],
-        safetySettings: [
-          {
-            category: "HARM_CATEGORY_HARASSMENT",
-            threshold: "BLOCK_MEDIUM_AND_ABOVE"
-          },
-          {
-            category: "HARM_CATEGORY_HATE_SPEECH",
-            threshold: "BLOCK_MEDIUM_AND_ABOVE"
-          },
-          {
-            category: "HARM_CATEGORY_SEXUALLY_EXPLICIT",
-            threshold: "BLOCK_MEDIUM_AND_ABOVE"
-          },
-          {
-            category: "HARM_CATEGORY_DANGEROUS_CONTENT",
-            threshold: "BLOCK_MEDIUM_AND_ABOVE"
-          }
-        ]
+        generationConfig: {
+          temperature: 0.7,
+          maxOutputTokens: 2048
+        }
       };
     } else {
-      // Handle text-only request
+      // Text-only request
       requestBody = {
         contents: [{
           parts: [{ text: fullPrompt }]
         }],
-        safetySettings: [
-          {
-            category: "HARM_CATEGORY_HARASSMENT",
-            threshold: "BLOCK_MEDIUM_AND_ABOVE"
-          },
-          {
-            category: "HARM_CATEGORY_HATE_SPEECH",
-            threshold: "BLOCK_MEDIUM_AND_ABOVE"
-          },
-          {
-            category: "HARM_CATEGORY_SEXUALLY_EXPLICIT",
-            threshold: "BLOCK_MEDIUM_AND_ABOVE"
-          },
-          {
-            category: "HARM_CATEGORY_DANGEROUS_CONTENT",
-            threshold: "BLOCK_MEDIUM_AND_ABOVE"
-          }
-        ]
+        generationConfig: {
+          temperature: 0.7,
+          maxOutputTokens: 2048
+        }
       };
     }
 
     const response = await axios.post(url, requestBody, {
-      headers: {
-        'Content-Type': 'application/json'
-      },
+      headers: { 'Content-Type': 'application/json' },
       timeout: 30000
     });
 
     if (response.data?.candidates?.[0]?.content?.parts?.[0]?.text) {
       return response.data.candidates[0].content.parts[0].text;
     } else {
-      console.error('Unexpected Gemini response structure:', response.data);
-      throw new Error('Invalid response from Gemini API');
+      throw new Error('No response from Gemini API');
+    }
+  } catch (error) {
+    console.error('Gemini API error:', error.message);
+    throw error;
+  }
+};
+
+// Convert audio to text using OpenAI Whisper (supports Opus format)
+const transcribeAudio = async (audioBuffer, mimeType = 'audio/ogg; codecs=opus') => {
+  try {
+    const apiKey = process.env.OPENAI_API_KEY;
+    if (!apiKey) {
+      throw new Error('OPENAI_API_KEY not configured');
     }
 
+    const formData = new FormData();
+    formData.append('file', audioBuffer, {
+      filename: 'audio.ogg',
+      contentType: mimeType
+    });
+    formData.append('model', 'whisper-1');
+    formData.append('language', 'auto'); // Auto-detect language
+
+    const response = await axios.post('https://api.openai.com/v1/audio/transcriptions', formData, {
+      headers: {
+        'Authorization': `Bearer ${apiKey}`,
+        ...formData.getHeaders()
+      },
+      timeout: 30000
+    });
+
+    return response.data.text || '';
   } catch (error) {
-    console.error('Gemini API Error:', error.response?.data || error.message);
-    
-    if (error.response?.status === 400) {
-      throw new Error('Invalid request to Gemini API');
-    } else if (error.response?.status === 403) {
-      throw new Error('Gemini API access forbidden - check API key');
-    } else if (error.response?.status === 429) {
-      throw new Error('Gemini API rate limit exceeded');
-    } else {
-      throw new Error('Failed to get response from Gemini AI');
-    }
+    console.error('Audio transcription error:', error.message);
+    throw error;
   }
+};
+
+// Generate language selection buttons for WhatsApp
+const generateLanguageButtons = () => {
+  return {
+    type: 'interactive',
+    interactive: {
+      type: 'button',
+      header: {
+        type: 'text',
+        text: 'Choose Your Language / भाषा चुनें / భాష ఎంచుకోండి'
+      },
+      body: {
+        text: 'Please select your preferred language for healthcare assistance:'
+      },
+      action: {
+        buttons: [
+          {
+            type: 'reply',
+            reply: {
+              id: 'lang_en',
+              title: 'English'
+            }
+          },
+          {
+            type: 'reply',
+            reply: {
+              id: 'lang_hi',
+              title: 'हिंदी (Hindi)'
+            }
+          },
+          {
+            type: 'reply',
+            reply: {
+              id: 'lang_te',
+              title: 'తెలుగు (Telugu)'
+            }
+          }
+        ]
+      }
+    }
+  };
+};
+
+// Generate additional language options
+const generateMoreLanguageButtons = () => {
+  return {
+    type: 'interactive',
+    interactive: {
+      type: 'button',
+      header: {
+        type: 'text',
+        text: 'More Languages / अधिक भाषाएं'
+      },
+      body: {
+        text: 'Select from additional language options:'
+      },
+      action: {
+        buttons: [
+          {
+            type: 'reply',
+            reply: {
+              id: 'lang_ta',
+              title: 'தமிழ் (Tamil)'
+            }
+          },
+          {
+            type: 'reply',
+            reply: {
+              id: 'lang_or',
+              title: 'ଓଡ଼ିଆ (Odia)'
+            }
+          },
+          {
+            type: 'reply',
+            reply: {
+              id: 'lang_hi_trans',
+              title: 'Hindi (Roman)'
+            }
+          }
+        ]
+      }
+    }
+  };
 };
 
 module.exports = {
   detectLanguage,
   getGeminiResponse,
+  transcribeAudio,
+  generateLanguageButtons,
+  generateMoreLanguageButtons,
   getSystemPrompt
 };

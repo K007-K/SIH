@@ -16,7 +16,10 @@ class VaccinationSafetyGuards {
             error_te: 'ఈ IP నుండి చాలా అభ్యర్థనలు, దయచేసి తర్వాత మళ్లీ ప్రయత్నించండి.'
         },
         standardHeaders: true,
-        legacyHeaders: false
+        legacyHeaders: false,
+        keyGenerator: (req) => {
+            return req.ip || req.connection.remoteAddress || 'unknown';
+        }
     });
 
     /**
