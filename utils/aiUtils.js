@@ -314,67 +314,88 @@ Respond with ONLY the language code (e.g., "hi", "te_trans", "en"):`;
 };
 
 // Gemini AI response function with Gemini 2.0 Flash
-const getGeminiResponse = async (prompt, imageData = null, language = 'en') => {
-  try {
-    const apiKey = process.env.GEMINI_API_KEY;
-    if (!apiKey) {
-      throw new Error('GEMINI_API_KEY not configured');
-    }
+const getGeminiResponse = async (prompt, imageData = null, language = 'en', retries = 3) => {
+  for (let attempt = 1; attempt <= retries; attempt++) {
+    try {
+      const apiKey = process.env.GEMINI_API_KEY;
+      if (!apiKey) {
+        throw new Error('GEMINI_API_KEY not configured');
+      }
 
-    // Use Gemini 2.0 Flash for all responses
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-exp:generateContent?key=${apiKey}`;
-    
-    // Get system prompt based on language
-    const systemPrompt = getSystemPrompt(language);
-    const fullPrompt = `${systemPrompt}\n\nUser: ${prompt}`;
+      // Use Gemini 1.5 Flash instead of 2.0 for better rate limits
+      const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
+      
+      // Simplified system prompt to reduce token usage
+      const systemPrompt = `You are a helpful healthcare assistant. Provide brief, accurate medical guidance in ${language === 'en' ? 'English' : language}. Always recommend consulting a doctor for serious concerns.`;
+      const fullPrompt = `${systemPrompt}\n\nUser: ${prompt}`;
 
-    let requestBody;
+      let requestBody;
 
-    if (imageData) {
-      // Handle image analysis
-      requestBody = {
-        contents: [{
-          parts: [
-            { text: fullPrompt },
-            {
-              inline_data: {
-                mime_type: imageData.mimeType,
-                data: imageData.data
+      if (imageData) {
+        // Handle image analysis
+        requestBody = {
+          contents: [{
+            parts: [
+              { text: fullPrompt },
+              {
+                inline_data: {
+                  mime_type: imageData.mimeType,
+                  data: imageData.data
+                }
               }
-            }
-          ]
-        }],
-        generationConfig: {
-          temperature: 0.7,
-          maxOutputTokens: 2048
-        }
-      };
-    } else {
-      // Text-only request
-      requestBody = {
-        contents: [{
-          parts: [{ text: fullPrompt }]
-        }],
-        generationConfig: {
-          temperature: 0.7,
-          maxOutputTokens: 2048
-        }
-      };
-    }
+            ]
+          }],
+          generationConfig: {
+            temperature: 0.3,
+            maxOutputTokens: 1024
+          }
+        };
+      } else {
+        // Text-only request
+        requestBody = {
+          contents: [{
+            parts: [{ text: fullPrompt }]
+          }],
+          generationConfig: {
+            temperature: 0.3,
+            maxOutputTokens: 1024
+          }
+        };
+      }
 
-    const response = await axios.post(url, requestBody, {
-      headers: { 'Content-Type': 'application/json' },
-      timeout: 30000
-    });
+      const response = await axios.post(url, requestBody, {
+        headers: { 'Content-Type': 'application/json' },
+        timeout: 15000
+      });
 
-    if (response.data?.candidates?.[0]?.content?.parts?.[0]?.text) {
-      return response.data.candidates[0].content.parts[0].text;
-    } else {
-      throw new Error('No response from Gemini API');
+      if (response.data?.candidates?.[0]?.content?.parts?.[0]?.text) {
+        return response.data.candidates[0].content.parts[0].text;
+      } else {
+        throw new Error('No response from Gemini API');
+      }
+    } catch (error) {
+      console.error(`Gemini API error (attempt ${attempt}):`, error.message);
+      
+      // Handle rate limiting
+      if (error.response?.status === 429) {
+        const waitTime = Math.pow(2, attempt) * 1000; // Exponential backoff
+        console.log(`Rate limited, waiting ${waitTime}ms before retry ${attempt}/${retries}`);
+        
+        if (attempt < retries) {
+          await new Promise(resolve => setTimeout(resolve, waitTime));
+          continue;
+        } else {
+          return "I'm experiencing high demand right now. Please try again in a moment, or describe your health concern and I'll help you.";
+        }
+      }
+      
+      if (attempt === retries) {
+        throw error;
+      }
+      
+      // Wait before retry for other errors
+      await new Promise(resolve => setTimeout(resolve, 1000 * attempt));
     }
-  } catch (error) {
-    console.error('Gemini API error:', error.message);
-    throw error;
   }
 };
 
