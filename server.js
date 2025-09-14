@@ -19,7 +19,6 @@ const moment = require('moment');
 
 // Import Vaccination Tracker feature (if routes exist)
 // const vaccinationRoutes = require('./features/vaccination-tracker/routes/vaccinationRoutes');
-// const VaccinationWhatsAppIntegration = require('./features/vaccination-tracker/integration/whatsappIntegration');
 
 // Load environment variables
 const dotenv = require('dotenv');
@@ -49,8 +48,22 @@ const setUserLanguage = (phoneNumber, language) => {
   userConversationState.set(phoneNumber, { hasSelectedLanguage: true });
 };
 
+const updateUserLanguage = async (phoneNumber, language) => {
+  userLanguages.set(phoneNumber, language);
+  userConversationState.set(phoneNumber, { hasSelectedLanguage: true });
+  console.log(`Updated language for ${phoneNumber} to ${language}`);
+};
+
 const getUserLanguage = (phoneNumber) => {
   return userLanguages.get(phoneNumber) || 'en';
+};
+
+// Mock VaccinationWhatsAppIntegration for compatibility
+const VaccinationWhatsAppIntegration = {
+  isVaccinationMessage: (message) => {
+    const vaccinationKeywords = ['vaccine', 'vaccination', 'immunization', 'shot', 'टीका', 'వ్యాక్సిన్', 'தடுப்பூசி'];
+    return vaccinationKeywords.some(keyword => message.toLowerCase().includes(keyword));
+  }
 };
 
 // Download WhatsApp media files
