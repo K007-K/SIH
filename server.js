@@ -58,28 +58,51 @@ const getUserLanguage = (phoneNumber) => {
 // Download WhatsApp media files
 const downloadWhatsAppMedia = async (mediaId) => {
   try {
-    const token = process.env.WHATSAPP_TOKEN;
+    const token = process.env.WHATSAPP_ACCESS_TOKEN; // Fixed: Use correct env variable
+    
+    console.log(`Downloading media: ${mediaId}`);
     
     // Get media URL
     const mediaResponse = await axios.get(`https://graph.facebook.com/v17.0/${mediaId}`, {
-      headers: { 'Authorization': `Bearer ${token}` }
+      headers: { 
+        'Authorization': `Bearer ${token}`,
+        'User-Agent': 'WhatsApp-Bot/1.0'
+      },
+      timeout: 10000
     });
     
+    console.log('Media URL response:', mediaResponse.data);
     const mediaUrl = mediaResponse.data.url;
+    
+    if (!mediaUrl) {
+      throw new Error('No media URL received from WhatsApp API');
+    }
     
     // Download media content
     const contentResponse = await axios.get(mediaUrl, {
-      headers: { 'Authorization': `Bearer ${token}` },
-      responseType: 'arraybuffer'
+      headers: { 
+        'Authorization': `Bearer ${token}`,
+        'User-Agent': 'WhatsApp-Bot/1.0'
+      },
+      responseType: 'arraybuffer',
+      timeout: 30000,
+      maxContentLength: 16 * 1024 * 1024 // 16MB limit
     });
+    
+    console.log(`Media downloaded: ${contentResponse.data.byteLength} bytes, type: ${contentResponse.headers['content-type']}`);
     
     return {
       data: Buffer.from(contentResponse.data).toString('base64'),
-      mimeType: contentResponse.headers['content-type']
+      mimeType: contentResponse.headers['content-type'] || 'application/octet-stream'
     };
   } catch (error) {
-    console.error('Media download error:', error.message);
-    throw error;
+    console.error('Media download error:', {
+      message: error.message,
+      status: error.response?.status,
+      statusText: error.response?.statusText,
+      data: error.response?.data
+    });
+    throw new Error(`Failed to download media: ${error.message}`);
   }
 };
 
@@ -442,60 +465,125 @@ const handleIncomingMessage = async (message, contact) => {
         // Download audio from WhatsApp
         const audioData = await downloadWhatsAppMedia(audioId);
         
+        // Validate audio data
+        if (!audioData.data) {
+          throw new Error('No audio data received');
+        }
+        
+        console.log(`Audio downloaded: ${Math.round(audioData.data.length * 0.75)} bytes, type: ${audioData.mimeType}`);
+        
+        // Convert base64 to buffer for Whisper API
+        const audioBuffer = Buffer.from(audioData.data, 'base64');
+        
         // Transcribe audio using OpenAI Whisper (supports Opus)
-        const transcription = await transcribeAudio(Buffer.from(audioData.data, 'base64'), audioMimeType);
+        const transcription = await transcribeAudio(audioBuffer, audioData.mimeType);
         console.log(`Audio transcribed: "${transcription}"`);
         
         if (!transcription || transcription.trim().length === 0) {
-          aiResponse = 'I received your voice message but could not transcribe it. Please send your health question as text.';
+          aiResponse = 'I received your voice message but could not understand the speech. Please try speaking more clearly or send your question as text.';
           messageContent = '[Audio received - transcription failed]';
         } else {
           // Process transcribed text
+          messageContent = transcription;
+          
+          // Detect language and get AI response
           const detectedLanguage = await detectLanguage(transcription);
           const finalLanguage = detectedLanguage || userLanguage;
           
-          aiResponse = await getGeminiResponse(transcription, null, finalLanguage);
-          messageContent = `[Audio transcribed: "${transcription}"]`;
+          const audioPrompt = `Voice message transcription: "${transcription}"
+Please provide healthcare guidance based on this voice message.`;
+          
+          aiResponse = await getGeminiResponse(audioPrompt, null, finalLanguage);
+          console.log(`Audio processed successfully, transcription: "${transcription}"`);
         }
         
-      } catch (audioError) {
-        console.error('Audio processing error:', audioError.message);
-        aiResponse = 'Sorry, I had trouble processing your voice message. Please try sending it as text.';
+      } catch (error) {
+        console.error('Audio processing error:', {
+          message: error.message,
+          stack: error.stack,
+          audioId: message.audio?.id,
+          mimeType: message.audio?.mime_type
+        });
+        
+        // Provide specific error messages
+        if (error.message.includes('OPENAI_API_KEY')) {
+          aiResponse = 'Voice message processing is temporarily unavailable. Please send your question as text.';
+        } else if (error.message.includes('Failed to download')) {
+          aiResponse = 'I had trouble accessing your voice message. Please try sending it again.';
+        } else {
+          aiResponse = 'Sorry, I had trouble processing your voice message. Please try sending it as text.';
+        }
+        
         messageContent = '[Audio processing failed]';
       }
       
     } else if (message.type === 'image') {
-      // Handle image messages with improved analysis
+      // Handle image messages
       console.log('Image message received:', JSON.stringify(message, null, 2));
       
       try {
         const imageId = message.image?.id;
-        const imageMimeType = message.image?.mime_type || 'image/jpeg';
-        const imageCaption = message.image?.caption || '';
+        const imageCaption = message.image?.caption || 'Medical image for analysis';
         
         if (!imageId) {
           throw new Error('No image ID found in message');
         }
         
-        console.log(`Processing image: ID=${imageId}, MimeType=${imageMimeType}`);
+        console.log(`Processing image: ID=${imageId}, Caption=${imageCaption}`);
         
         // Download image from WhatsApp
         const imageData = await downloadWhatsAppMedia(imageId);
         
-        // Analyze image using Gemini 2.0 Flash vision capabilities
-        const imagePrompt = imageCaption ? 
-          `Analyze this medical image. User says: "${imageCaption}"` : 
-          'Analyze this medical image and provide health insights.';
+        // Validate image data
+        if (!imageData.data || !imageData.mimeType) {
+          throw new Error('Invalid image data received');
+        }
         
-        const detectedLanguage = await detectLanguage(imageCaption || 'en');
+        // Check if it's a valid image MIME type
+        const validImageTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp', 'image/gif'];
+        if (!validImageTypes.includes(imageData.mimeType.toLowerCase())) {
+          throw new Error(`Unsupported image format: ${imageData.mimeType}`);
+        }
+        
+        console.log(`Image validated: ${imageData.mimeType}, size: ${Math.round(imageData.data.length * 0.75)} bytes`);
+        
+        // Analyze image using Gemini Vision
+        const detectedLanguage = await detectLanguage(imageCaption);
         const finalLanguage = detectedLanguage || userLanguage;
         
-        aiResponse = await getGeminiResponse(imagePrompt, imageData, finalLanguage);
-        messageContent = `[Image received${imageCaption ? ` with caption: "${imageCaption}"` : ''}]`;
+        const analysisPrompt = `Analyze this medical image and provide healthcare guidance. 
+Image caption: ${imageCaption}
+Please provide:
+1. What you observe in the image
+2. Possible medical concerns
+3. Recommended actions
+4. When to seek professional help`;
         
-      } catch (imageError) {
-        console.error('Image processing error:', imageError.message);
-        aiResponse = 'Sorry, I had trouble analyzing your image. Please try again or describe your symptoms in text.';
+        aiResponse = await getGeminiResponse(
+          analysisPrompt,
+          imageData,
+          finalLanguage
+        );
+        
+        messageContent = `[Image: ${imageCaption}]`;
+        console.log(`Image analyzed successfully, response length: ${aiResponse.length}`);
+        
+      } catch (error) {
+        console.error('Image processing error:', {
+          message: error.message,
+          stack: error.stack,
+          imageId: message.image?.id
+        });
+        
+        // Provide specific error messages
+        if (error.message.includes('Unsupported image format')) {
+          aiResponse = 'Please send your image in JPEG, PNG, or WebP format for analysis.';
+        } else if (error.message.includes('Failed to download')) {
+          aiResponse = 'I had trouble accessing your image. Please try sending it again.';
+        } else {
+          aiResponse = 'Sorry, I had trouble analyzing your image. Please try again or describe your symptoms in text.';
+        }
+        
         messageContent = '[Image processing failed]';
       }
     }
