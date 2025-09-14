@@ -313,90 +313,104 @@ Respond with ONLY the language code (e.g., "hi", "te_trans", "en"):`;
   return 'en'; // Default to English on error
 };
 
-// Gemini AI response function with Gemini 2.0 Flash
+// Gemini AI response function with fallback from 2.0 to 1.5 Flash
 const getGeminiResponse = async (prompt, imageData = null, language = 'en', retries = 3) => {
-  for (let attempt = 1; attempt <= retries; attempt++) {
-    try {
-      const apiKey = process.env.GEMINI_API_KEY;
-      if (!apiKey) {
-        throw new Error('GEMINI_API_KEY not configured');
-      }
-
-      // Use Gemini 2.0 Flash for better response quality
-      const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-exp:generateContent?key=${apiKey}`;
-      
-      // Enhanced system prompt for better healthcare responses
-      const systemPrompt = getSystemPrompt(language) || `You are an expert healthcare assistant with comprehensive medical knowledge. Provide accurate, helpful medical guidance in ${language === 'en' ? 'English' : language}. Always recommend consulting a doctor for serious concerns.`;
-      const fullPrompt = `${systemPrompt}\n\nUser: ${prompt}`;
-
-      let requestBody;
-
-      if (imageData) {
-        // Handle image analysis
-        requestBody = {
-          contents: [{
-            parts: [
-              { text: fullPrompt },
-              {
-                inline_data: {
-                  mime_type: imageData.mimeType,
-                  data: imageData.data
-                }
-              }
-            ]
-          }],
-          generationConfig: {
-            temperature: 0.4,
-            maxOutputTokens: 2048
-          }
-        };
-      } else {
-        // Text-only request
-        requestBody = {
-          contents: [{
-            parts: [{ text: fullPrompt }]
-          }],
-          generationConfig: {
-            temperature: 0.4,
-            maxOutputTokens: 2048
-          }
-        };
-      }
-
-      const response = await axios.post(url, requestBody, {
-        headers: { 'Content-Type': 'application/json' },
-        timeout: 15000
-      });
-
-      if (response.data?.candidates?.[0]?.content?.parts?.[0]?.text) {
-        return response.data.candidates[0].content.parts[0].text;
-      } else {
-        throw new Error('No response from Gemini API');
-      }
-    } catch (error) {
-      console.error(`Gemini API error (attempt ${attempt}):`, error.message);
-      
-      // Handle rate limiting
-      if (error.response?.status === 429) {
-        const waitTime = Math.pow(2, attempt) * 1000; // Exponential backoff
-        console.log(`Rate limited, waiting ${waitTime}ms before retry ${attempt}/${retries}`);
-        
-        if (attempt < retries) {
-          await new Promise(resolve => setTimeout(resolve, waitTime));
-          continue;
-        } else {
-          return "I'm experiencing high demand right now. Please try again in a moment, or describe your health concern and I'll help you.";
+  // Try Gemini 2.0 Flash first, then fallback to 1.5 Flash
+  const models = [
+    'gemini-2.0-flash-exp',
+    'gemini-1.5-flash'
+  ];
+  
+  for (const model of models) {
+    for (let attempt = 1; attempt <= retries; attempt++) {
+      try {
+        const apiKey = process.env.GEMINI_API_KEY;
+        if (!apiKey) {
+          throw new Error('GEMINI_API_KEY not configured');
         }
-      }
+
+        const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
+        console.log(`Trying ${model} (attempt ${attempt}/${retries})`);
       
-      if (attempt === retries) {
-        throw error;
+        // Enhanced system prompt for better healthcare responses
+        const systemPrompt = getSystemPrompt(language) || `You are an expert healthcare assistant with comprehensive medical knowledge. Provide accurate, helpful medical guidance in ${language === 'en' ? 'English' : language}. Always recommend consulting a doctor for serious concerns.`;
+        const fullPrompt = `${systemPrompt}\n\nUser: ${prompt}`;
+
+        let requestBody;
+
+        if (imageData) {
+          // Handle image analysis
+          requestBody = {
+            contents: [{
+              parts: [
+                { text: fullPrompt },
+                {
+                  inline_data: {
+                    mime_type: imageData.mimeType,
+                    data: imageData.data
+                  }
+                }
+              ]
+            }],
+            generationConfig: {
+              temperature: 0.4,
+              maxOutputTokens: 2048
+            }
+          };
+        } else {
+          // Text-only request
+          requestBody = {
+            contents: [{
+              parts: [{ text: fullPrompt }]
+            }],
+            generationConfig: {
+              temperature: 0.4,
+              maxOutputTokens: 2048
+            }
+          };
+        }
+
+        const response = await axios.post(url, requestBody, {
+          headers: { 'Content-Type': 'application/json' },
+          timeout: 15000
+        });
+
+        if (response.data?.candidates?.[0]?.content?.parts?.[0]?.text) {
+          console.log(`✅ Success with ${model}`);
+          return response.data.candidates[0].content.parts[0].text;
+        } else {
+          throw new Error('No response from Gemini API');
+        }
+      } catch (error) {
+        console.error(`${model} error (attempt ${attempt}):`, error.message);
+        
+        // Handle rate limiting
+        if (error.response?.status === 429) {
+          const waitTime = Math.pow(2, attempt) * 1000; // Exponential backoff
+          console.log(`Rate limited on ${model}, waiting ${waitTime}ms before retry ${attempt}/${retries}`);
+          
+          if (attempt < retries) {
+            await new Promise(resolve => setTimeout(resolve, waitTime));
+            continue;
+          } else {
+            console.log(`❌ ${model} exhausted retries, trying next model...`);
+            break; // Try next model
+          }
+        }
+        
+        // For other errors, try next attempt or next model
+        if (attempt === retries) {
+          console.log(`❌ ${model} failed after ${retries} attempts, trying next model...`);
+          break; // Try next model
+        }
+        
+        await new Promise(resolve => setTimeout(resolve, 1000));
       }
-      
-      // Wait before retry for other errors
-      await new Promise(resolve => setTimeout(resolve, 1000 * attempt));
     }
   }
+  
+  // If all models fail, return fallback message
+  return "I'm experiencing technical difficulties. Please try asking your health question again, or contact a healthcare professional for immediate assistance.";
 };
 
 // Simple queue to prevent concurrent transcription requests
